@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mysql -uroot -p123456 health_data -e \"ALTER TABLE sys_user ADD COLUMN role tinyint NOT NULL DEFAULT 1 COMMENT '角色\\(1用户 2管理员\\)'; SHOW COLUMNS FROM sys_user LIKE 'role'; SELECT id, phone, role FROM sys_user LIMIT 5;\")",
+      "Bash(ls \"d:/health_care_begin\" && ls \"d:/\" | head -30)",
+      "Read(//d//**)",
+      "Bash(mysql -uroot -p123456 --default-character-set=utf8mb4 health_data -e \"SHOW CREATE TABLE service_category\\\\G SELECT * FROM service_category;\")",
+      "Bash(mysql -uroot -p123456 --default-character-set=utf8mb4 health_data -e ' *)",
+      "WebSearch",
+      "WebFetch(domain:www.pexels.com)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://images.pexels.com/photos/5794055/pexels-photo-5794055.jpeg?w=600')",
+      "Bash(echo \"pexels CDN: $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://images.pexels.com/photos/5794055/pexels-photo-5794055.jpeg?w=600'\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://cdn.pixabay.com/photo/2023/06/08/11/45/food-8050276_640.jpg')",
+      "Bash(echo \"pixabay CDN: $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://cdn.pixabay.com/photo/2023/06/08/11/45/food-8050276_640.jpg'\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Boudin_Bakery%2C_Los_Angeles_-_a_packaged_loaf_%2848257628947%29.jpg/640px-Boudin_Bakery%2C_Los_Angeles_-_a_packaged_loaf_%2848257628947%29.jpg')"
+    ],
+    "additionalDirectories": [
+      "d:\\Elderly_care_Platfrom\\src\\main\\java\\com\\example\\Elderly_care_Platfrom\\service\\impl",
+      "d:\\Elderly_care_Platfrom\\src\\main\\resources\\static\\upload",
+      "d:\\Elderly_care_Platfrom\\src\\main\\java\\com\\example\\Elderly_care_Platfrom\\dao"
+    ]
+  }
+}

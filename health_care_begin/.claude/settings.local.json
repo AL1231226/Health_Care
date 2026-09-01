@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const p=require\\('d:/health_care_begin/node_modules/.package-lock.json'\\); console.log\\(Object.keys\\(p.packages\\).filter\\(k=>k.includes\\('node_modules/'\\)&&k.split\\('node_modules/'\\)[1]&&!k.split\\('node_modules/'\\)[1].includes\\('/'\\)\\)\\)\")",
+      "Bash(ls \"d:/\" | head -40)",
+      "Read(//d//**)",
+      "Bash(xargs grep -l \"Result\\\\|code.*msg\\\\|server.port\\\\|context-path\")",
+      "Bash(npm install *)",
+      "Bash(npx vite *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/login)",
+      "Bash(curl -s -o /dev/null -w \"main.js: %{http_code}\\\\n\" http://localhost:5173/src/main.js)",
+      "Bash(curl -s -o /dev/null -w \"Login.vue: %{http_code}\\\\n\" http://localhost:5173/src/views/Login.vue)",
+      "Bash(curl -s -o /dev/null -w \"router: %{http_code}\\\\n\" http://localhost:5173/src/router/index.js)",
+      "Bash(curl -s -o /dev/null -w \"main.scss: %{http_code}\\\\n\" http://localhost:5173/src/assets/main.scss)",
+      "Bash(curl -s -o /dev/null -w \"UserHome.vue: %{http_code}\\\\n\" http://localhost:5173/src/views/UserHome.vue)",
+      "Bash(curl -s -o /dev/null -w \"AdminHome.vue: %{http_code}\\\\n\" http://localhost:5173/src/views/AdminHome.vue)",
+      "Bash(node -e \"const i=require\\('@element-plus/icons-vue'\\); ['Iphone','Lock','User','Food','Brush','Umbrella','FirstAidKit'].forEach\\(n=>console.log\\(n, i[n]?'OK':'MISSING'\\)\\)\")",
+      "Bash(ls \"d:/\" | head -50; echo ---; ls \"c:/Users/Administrator/Desktop\" | head -50)",
+      "Read(//c/Users/Administrator/Desktop/**)",
+      "Bash(mysql -uroot -p123456 health_data -e \"SHOW TABLES;\")",
+      "Bash(mysql -uroot -p123456 health_data -e \"SHOW CREATE TABLE elder_profile\\\\G\")",
+      "Bash(mysql -uroot -p123456 health_data -e \"SHOW CREATE TABLE user_address\\\\G\")",
+      "Bash(mvn -q compile -DskipTests)",
+      "Bash(echo \"EXIT=$?\")"
+    ]
+  }
+}
