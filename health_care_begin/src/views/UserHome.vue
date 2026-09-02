@@ -3,9 +3,12 @@
 // 说明：后端目前仅有登录/注册接口，本页数据均为静态假数据，
 //       各区块已按后端接口形状组织，接口就绪后替换对应 TODO 即可。
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Food, Brush, Umbrella, FirstAidKit, Sunrise, Clock } from '@element-plus/icons-vue'
 import { listCategory } from '@/api/category.js'
+
+const router = useRouter()
 
 /* ---------- AI 助手小精灵（先展示，AI 对话后续接入） ---------- */
 const aiTips = ['你好呀，我是小颐 👋', '需要帮你预约服务吗？', '点击我可以和我聊天哦～']
@@ -97,12 +100,13 @@ const banners = [
 ]
 
 // 内置分类兜底：接口失败/未启用时用这份静态数据（图标为 Element Plus 内置组件）
+// 注：id 仅在接口失败时用于跳转商家列表，为按 DB 种子顺序的最佳猜测
 const builtinCategories = [
-  { name: '助餐服务', desc: '营养三餐上门', icon: Food, bg: '#fff1e8', color: '#ff8a4c' },
-  { name: '助洁服务', desc: '日常清洁打扫', icon: Brush, bg: '#e8f4ff', color: '#4c9fff' },
-  { name: '助浴服务', desc: '专业安全洗浴', icon: Umbrella, bg: '#e8fff4', color: '#34c98e' },
-  { name: '助医服务', desc: '陪诊取药挂号', icon: FirstAidKit, bg: '#fdeaea', color: '#f56c6c' },
-  { name: '康复护理', desc: '理疗康复指导', icon: Sunrise, bg: '#f4edff', color: '#9b6cf5' },
+  { id: 1, name: '助餐服务', desc: '营养三餐上门', icon: Food, bg: '#fff1e8', color: '#ff8a4c' },
+  { id: 2, name: '助洁服务', desc: '日常清洁打扫', icon: Brush, bg: '#e8f4ff', color: '#4c9fff' },
+  { id: 3, name: '助浴服务', desc: '专业安全洗浴', icon: Umbrella, bg: '#e8fff4', color: '#34c98e' },
+  { id: 4, name: '助医服务', desc: '陪诊取药挂号', icon: FirstAidKit, bg: '#fdeaea', color: '#f56c6c' },
+  { id: 5, name: '康复护理', desc: '理疗康复指导', icon: Sunrise, bg: '#f4edff', color: '#9b6cf5' },
 ]
 
 // 分类列表：来自后端 service_category 字典表（GET /service-category/list）
@@ -115,6 +119,7 @@ const loadCategories = async () => {
       categories.value = result.data.map((c) => {
         const builtin = builtinCategories.find((b) => b.name === c.categoryName) || {}
         return {
+          id: c.categoryId,
           name: c.categoryName,
           desc: builtin.desc || '',
           icon: builtin.icon || Food,
@@ -147,6 +152,11 @@ const merchants = [
   { name: '康乐康复中心', category: '康复', area: '白云区', orders: 437, score: 4.7, color: '#9b6cf5' },
 ]
 
+// 分类卡片 → 商家列表页（带分类 id 与名称，商家列表页按 id 拉取该分类下商家）
+const goMerchants = (c) => {
+  router.push({ path: '/user/merchants', query: { categoryId: c.id, categoryName: c.name } })
+}
+
 // 子页面均未建设，统一占位提示
 const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
 </script>
@@ -175,7 +185,7 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
       <section class="block">
         <h3 class="block-title">服务分类</h3>
         <div class="category-grid">
-          <div v-for="c in categories" :key="c.name" class="category-card" @click="todo(c.name)">
+          <div v-for="c in categories" :key="c.name" class="category-card" @click="goMerchants(c)">
             <span class="category-icon" :style="{ background: c.bg, color: c.color }">
               <el-icon :size="26"><component :is="c.icon" /></el-icon>
             </span>

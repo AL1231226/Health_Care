@@ -15,3 +15,18 @@ export const reviewProvider = (providerId, pass) => {
 export const toggleProviderStatus = (providerId, status) => {
   return request.put(`/service-provider/status/${providerId}`, null, { params: { status } })
 }
+
+// 分类下商家列表（用户端公开接口，后端 ServiceCategoryController）：GET /service-category/providers?categoryId=
+export const listProvidersByCategory = (categoryId) => {
+  return request.get('/service-category/providers', { params: { categoryId } })
+}
+
+// 商家详情（用户端公开接口）：GET /service-category/provider-detail?providerId=，返回基础信息 + 全部上架服务
+export const getProviderDetail = (providerId) => {
+  return request.get('/service-category/provider-detail', { params: { providerId } })
+}
+
+// 商家评价列表（用户端公开接口）：GET /service-category/provider-comments?providerId=，最新在前
+export const getProviderComments = (providerId) => {
+  return request.get('/service-category/provider-comments', { params: { providerId } })
+}

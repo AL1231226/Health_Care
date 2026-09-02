@@ -5,10 +5,13 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ElderProfile;
+import com.example.Elderly_care_Platfrom.entity.ServiceOrder;
 import com.example.Elderly_care_Platfrom.mapper.ElderProfileMapper;
+import com.example.Elderly_care_Platfrom.mapper.ServiceOrderMapper;
 import com.example.Elderly_care_Platfrom.service.IElderProfileService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.Elderly_care_Platfrom.utils.UserContext;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,6 +29,9 @@ import static com.example.Elderly_care_Platfrom.utils.ValidationUtil.PHONE_REGEX
  */
 @Service
 public class ElderProfileServiceImpl extends ServiceImpl<ElderProfileMapper, ElderProfile> implements IElderProfileService {
+
+    @Resource
+    private ServiceOrderMapper serviceOrderMapper;
 
     @Override
     public Result getAllElders() {
@@ -116,6 +122,14 @@ public class ElderProfileServiceImpl extends ServiceImpl<ElderProfileMapper, Eld
         String userId = UserContext.get().userId();
         if (!userId.equals(elderProfile.getUserId().toString())) {
             return Result.fail("无权操作");
+        }
+        // 保护：该老人有进行中订单(0待接单/1服务中)时禁止删除，
+        // 避免删档后商家端接单/服务中的订单失去老人健康信息；已完成/已取消可删（详情有「档案已删」兜底）
+        Long activeCount = serviceOrderMapper.selectCount(new QueryWrapper<ServiceOrder>()
+                .eq("elder_id", elderId)
+                .in("order_status", 0, 1));
+        if (activeCount != null && activeCount > 0) {
+            return Result.fail("该老人存在进行中的订单，请先取消订单或等服务完成后再删除");
         }
         boolean result = removeById(elderId);
         if (!result) {

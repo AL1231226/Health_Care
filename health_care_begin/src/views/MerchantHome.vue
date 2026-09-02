@@ -4,9 +4,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Shop, Phone, Calendar, Location, Star } from '@element-plus/icons-vue'
+import { ArrowDown, Shop, Phone, Calendar, Location, Star, WarningFilled } from '@element-plus/icons-vue'
 import { listItems, addItem, updateItem, deleteItem, toggleItemStatus } from '@/api/item.js'
 import { listCategory } from '@/api/category.js'
+import { listMerchantOrders, updateOrderStatus } from '@/api/order.js'
 
 const router = useRouter()
 
@@ -196,6 +197,97 @@ const toggleStatus = async (row) => {
   }
 }
 
+/* ---------- 订单管理（GET /service-order/merchant/list 真实数据，接单/完成走状态流转） ---------- */
+const activeTab = ref('items') // items 服务项目 / orders 订单管理
+const orderLoading = ref(false)
+const orders = ref([])
+const ALL_STATUS = -1 // 筛选哨兵：全部
+const orderStatusFilter = ref(ALL_STATUS)
+const orderStatusTabs = [
+  { value: ALL_STATUS, label: '全部' },
+  { value: 0, label: '待接单' },
+  { value: 1, label: '服务中' },
+  { value: 2, label: '已完成' },
+  { value: 3, label: '已取消' },
+]
+const orderStatusMap = {
+  0: { text: '待接单', type: 'warning' },
+  1: { text: '服务中', type: 'primary' },
+  2: { text: '已完成', type: 'success' },
+  3: { text: '已取消', type: 'info' },
+}
+const filteredOrders = computed(() =>
+  orderStatusFilter.value === ALL_STATUS
+    ? orders.value
+    : orders.value.filter((o) => o.orderStatus === orderStatusFilter.value),
+)
+const orderCounts = computed(() => {
+  const counts = { 0: 0, 1: 0, 2: 0, 3: 0 }
+  orders.value.forEach((o) => { if (counts[o.orderStatus] !== undefined) counts[o.orderStatus] += 1 })
+  return counts
+})
+const loadOrders = async () => {
+  orderLoading.value = true
+  try {
+    const res = await listMerchantOrders()
+    if (res.success) {
+      orders.value = res.data || []
+    } else {
+      ElMessage.error(res.errorMsg || '加载订单失败')
+    }
+  } catch (err) { /* 拦截器已统一提示 */ } finally {
+    orderLoading.value = false
+  }
+}
+
+/* ---------- 订单详情抽屉（含服务老人健康信息，接单/服务前必看） ---------- */
+const drawerVisible = ref(false)
+const currentOrder = ref(null)
+const genderText = (g) => (Number(g) === 1 ? '男' : Number(g) === 0 ? '女' : '—')
+const ageOf = (d) => {
+  if (!d) return null
+  const birth = new Date(d)
+  if (Number.isNaN(birth.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - birth.getFullYear()
+  if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age -= 1
+  return age
+}
+const fmtDateTime = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return String(v)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+const openOrderDetail = (row) => {
+  currentOrder.value = row
+  drawerVisible.value = true
+}
+
+// 接单(0→1) / 完成服务(1→2)：确认后调接口，成功后刷新列表
+const orderAction = (row, nextStatus) => {
+  const isAccept = nextStatus === 1
+  ElMessageBox.confirm(
+    isAccept ? '确认接单？接单后请按预约时间联系家属，安排上门服务。' : '确认服务已完成？完成后订单不可再变更状态。',
+    isAccept ? '接单确认' : '完成服务确认',
+    {
+      confirmButtonText: isAccept ? '确认接单' : '确认完成',
+      cancelButtonText: '取消',
+      type: 'warning',
+    },
+  ).then(async () => {
+    const res = await updateOrderStatus(row.orderId, nextStatus)
+    if (res.success) {
+      ElMessage.success(res.data || (isAccept ? '已接单' : '服务已完成'))
+      drawerVisible.value = false
+      loadOrders()
+    } else {
+      ElMessage.error(res.errorMsg || '操作失败')
+    }
+  }).catch(() => {})
+}
+
 /* ---------- 退出登录 ---------- */
 const handleLogout = () => {
   ElMessageBox.confirm('确定退出登录吗？', '退出确认', {
@@ -219,6 +311,7 @@ onMounted(() => {
   } catch (err) { /* 解析失败则全部用假数据 */ }
   loadCategories()
   loadItems()
+  loadOrders()
 })
 </script>
 
@@ -278,79 +371,141 @@ onMounted(() => {
         <el-button class="edit-btn" plain disabled title="店铺资料编辑功能建设中">编辑资料</el-button>
       </section>
 
-      <!-- ======== 数据统计 ======== -->
-      <section class="stats-row">
-        <div class="card stat-card">
-          <p class="stat-num">{{ stats.total }}</p>
-          <p class="stat-label">服务项目</p>
-        </div>
-        <div class="card stat-card">
-          <p class="stat-num on">{{ stats.onSale }}</p>
-          <p class="stat-label">已上架</p>
-        </div>
-        <div class="card stat-card">
-          <p class="stat-num off">{{ stats.offSale }}</p>
-          <p class="stat-label">已下架</p>
-        </div>
-        <div class="card stat-card">
-          <p class="stat-num star">{{ stats.avg }}</p>
-          <p class="stat-label">平均评分</p>
-        </div>
-      </section>
+      <!-- ======== 服务项目 / 订单管理 Tab ======== -->
+      <el-tabs v-model="activeTab" class="work-tabs">
+        <!-- ---------- Tab：服务项目 ---------- -->
+        <el-tab-pane label="服务项目" name="items">
+          <!-- ======== 数据统计 ======== -->
+          <section class="stats-row">
+            <div class="card stat-card">
+              <p class="stat-num">{{ stats.total }}</p>
+              <p class="stat-label">服务项目</p>
+            </div>
+            <div class="card stat-card">
+              <p class="stat-num on">{{ stats.onSale }}</p>
+              <p class="stat-label">已上架</p>
+            </div>
+            <div class="card stat-card">
+              <p class="stat-num off">{{ stats.offSale }}</p>
+              <p class="stat-label">已下架</p>
+            </div>
+            <div class="card stat-card">
+              <p class="stat-num star">{{ stats.avg }}</p>
+              <p class="stat-label">平均评分</p>
+            </div>
+          </section>
 
-      <!-- ======== 服务项目管理 ======== -->
-      <section class="card items-card">
-        <div class="card-head">
-          <h3>服务项目管理</h3>
-          <el-button class="primary-btn" type="primary" @click="openAdd">＋ 新增服务</el-button>
-        </div>
+          <!-- ======== 服务项目管理 ======== -->
+          <section class="card items-card">
+            <div class="card-head">
+              <h3>服务项目管理</h3>
+              <el-button class="primary-btn" type="primary" @click="openAdd">＋ 新增服务</el-button>
+            </div>
 
-        <el-table :data="items" v-loading="itemLoading" stripe>
-          <el-table-column prop="itemName" label="服务名称" min-width="180" show-overflow-tooltip />
-          <el-table-column label="分类" width="100">
-            <template #default="{ row }">
-              <span class="cat-chip">{{ categoryName(row.categoryId) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="价格" width="120">
-            <template #default="{ row }">
-              <span class="price">¥{{ row.price }}</span>
-              <span class="price-unit">/{{ row.unit }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="duration" label="服务时长" width="110" />
-          <el-table-column label="销量" width="90">
-            <template #default="{ row }">
-              {{ row.sales ?? 0 }}
-            </template>
-          </el-table-column>
-          <el-table-column label="评分" width="100">
-            <template #default="{ row }">
-              <span class="score"><el-icon class="score-icon"><Star /></el-icon>{{ row.score ?? '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="110">
-            <template #default="{ row }">
-              <el-switch
-                :model-value="row.status"
-                :active-value="1"
-                :inactive-value="0"
-                active-text="上架"
-                inline-prompt
-                :loading="togglingId === row.itemId"
-                @change="toggleStatus(row)"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
-            <template #default="{ row }">
-              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button link type="danger" @click="removeItem(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-if="!itemLoading && !items.length" description="还没有服务项目，点击右上角「新增服务」上架第一个服务" />
-      </section>
+            <el-table :data="items" v-loading="itemLoading" stripe>
+              <el-table-column prop="itemName" label="服务名称" min-width="180" show-overflow-tooltip />
+              <el-table-column label="分类" width="100">
+                <template #default="{ row }">
+                  <span class="cat-chip">{{ categoryName(row.categoryId) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="价格" width="120">
+                <template #default="{ row }">
+                  <span class="price">¥{{ row.price }}</span>
+                  <span class="price-unit">/{{ row.unit }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="duration" label="服务时长" width="110" />
+              <el-table-column label="销量" width="90">
+                <template #default="{ row }">
+                  {{ row.sales ?? 0 }}
+                </template>
+              </el-table-column>
+              <el-table-column label="评分" width="100">
+                <template #default="{ row }">
+                  <span class="score"><el-icon class="score-icon"><Star /></el-icon>{{ row.score ?? '-' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-switch
+                    :model-value="row.status"
+                    :active-value="1"
+                    :inactive-value="0"
+                    active-text="上架"
+                    inline-prompt
+                    :loading="togglingId === row.itemId"
+                    @change="toggleStatus(row)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="140" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+                  <el-button link type="danger" @click="removeItem(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!itemLoading && !items.length" description="还没有服务项目，点击右上角「新增服务」上架第一个服务" />
+          </section>
+        </el-tab-pane>
+
+        <!-- ---------- Tab：订单管理 ---------- -->
+        <el-tab-pane label="订单管理" name="orders">
+          <section class="card orders-card">
+            <div class="card-head orders-head">
+              <h3>订单管理</h3>
+              <el-radio-group v-model="orderStatusFilter" size="small">
+                <el-radio-button v-for="t in orderStatusTabs" :key="t.value" :value="t.value">
+                  {{ t.label }}
+                  <span class="status-count">{{ t.value === ALL_STATUS ? orders.length : orderCounts[t.value] }}</span>
+                </el-radio-button>
+              </el-radio-group>
+            </div>
+
+            <el-table :data="filteredOrders" v-loading="orderLoading" stripe>
+              <el-table-column label="订单号" width="180">
+                <template #default="{ row }">
+                  <span class="order-no-cell">{{ row.orderNo }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="itemName" label="服务项目" min-width="150" show-overflow-tooltip />
+              <el-table-column label="服务老人" width="130">
+                <template #default="{ row }">
+                  <span v-if="row.elderName">{{ row.elderName }}<span class="elder-sex">（{{ genderText(row.gender) }}）</span></span>
+                  <span v-else class="muted-text">档案已删</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="金额" width="110">
+                <template #default="{ row }">
+                  <span class="price">¥{{ row.totalPrice }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="预约时间" width="165">
+                <template #default="{ row }">
+                  <span v-if="row.serviceTime">{{ fmtDateTime(row.serviceTime) }}</span>
+                  <span v-else class="muted-text">未预约</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="orderStatusMap[row.orderStatus]?.type" size="small" effect="light">
+                    {{ orderStatusMap[row.orderStatus]?.text }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="180" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" @click="openOrderDetail(row)">详情</el-button>
+                  <el-button v-if="row.orderStatus === 0" link type="success" @click="orderAction(row, 1)">接单</el-button>
+                  <el-button v-if="row.orderStatus === 1" link type="primary" @click="orderAction(row, 2)">完成服务</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!orderLoading && !filteredOrders.length" description="暂无相关订单" />
+          </section>
+        </el-tab-pane>
+      </el-tabs>
     </main>
 
     <!-- ======== 新增 / 编辑服务弹窗 ======== -->
@@ -389,6 +544,58 @@ onMounted(() => {
         <el-button class="primary-btn" type="primary" :loading="saving" @click="saveItem">保 存</el-button>
       </template>
     </el-dialog>
+
+    <!-- ======== 订单详情抽屉（服务老人健康信息为接单/服务前必看项） ======== -->
+    <el-drawer v-model="drawerVisible" title="订单详情" size="460px">
+      <div v-if="currentOrder" class="order-detail">
+        <!-- 服务信息 -->
+        <div class="detail-section">
+          <div class="section-title">服务信息</div>
+          <div class="d-row"><span class="d-label">服务项目</span><span class="d-value">{{ currentOrder.itemName || '服务已删除' }}</span></div>
+          <div class="d-row"><span class="d-label">单价 × 数量</span><span class="d-value">¥{{ currentOrder.unitPrice }} × {{ currentOrder.quantity }}</span></div>
+          <div class="d-row"><span class="d-label">订单金额</span><span class="d-value amount">¥{{ currentOrder.totalPrice }}</span></div>
+          <div class="d-row"><span class="d-label">订单号</span><span class="d-value order-no-cell">{{ currentOrder.orderNo }}</span></div>
+          <div class="d-row"><span class="d-label">下单时间</span><span class="d-value">{{ fmtDateTime(currentOrder.createTime) }}</span></div>
+        </div>
+
+        <!-- 服务老人（健康信息给商家，服务前必看） -->
+        <div class="detail-section elder-section">
+          <div class="section-title">服务老人</div>
+          <template v-if="currentOrder.elderName">
+            <div class="elder-name">
+              {{ currentOrder.elderName }}
+              <span class="elder-tag">
+                {{ genderText(currentOrder.gender) }} · {{ ageOf(currentOrder.birthDate) != null ? `${ageOf(currentOrder.birthDate)}岁` : '年龄未知' }}
+              </span>
+            </div>
+            <div class="d-row"><span class="d-label">老人电话</span><span class="d-value">{{ currentOrder.elderPhone || '未填写' }}</span></div>
+            <div class="health-box">
+              <div class="health-title"><el-icon class="health-icon"><WarningFilled /></el-icon>健康备注 / 护理注意事项</div>
+              <p class="health-text">{{ currentOrder.healthNote || '家属未填写健康备注' }}</p>
+            </div>
+          </template>
+          <div v-else class="muted-text">该老人档案已被删除，无法查看健康信息</div>
+        </div>
+
+        <!-- 服务安排 -->
+        <div class="detail-section">
+          <div class="section-title">服务安排</div>
+          <div class="d-row"><span class="d-label">预约时间</span><span class="d-value">{{ currentOrder.serviceTime ? fmtDateTime(currentOrder.serviceTime) : '未预约（下单后沟通）' }}</span></div>
+          <div class="d-row"><span class="d-label">服务地址</span><span class="d-value">{{ currentOrder.addressText || '未选择（下单后电话沟通）' }}</span></div>
+          <div class="d-row"><span class="d-label">联系电话</span><span class="d-value">{{ currentOrder.contactPhone }}</span></div>
+          <div class="d-row"><span class="d-label">订单备注</span><span class="d-value">{{ currentOrder.remark || '无' }}</span></div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="drawer-actions">
+          <el-button v-if="currentOrder?.orderStatus === 0" type="success" size="large" @click="orderAction(currentOrder, 1)">确认接单</el-button>
+          <el-button v-if="currentOrder?.orderStatus === 1" type="primary" size="large" @click="orderAction(currentOrder, 2)">完成服务</el-button>
+          <el-tag v-if="currentOrder?.orderStatus === 2" type="success" size="large">服务已完成</el-tag>
+          <el-tag v-else-if="currentOrder?.orderStatus === 3" type="info" size="large">订单已取消</el-tag>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -396,6 +603,119 @@ onMounted(() => {
 .merchant-page {
   min-height: 100vh;
   background: #fdf8f4;
+}
+
+/* ============ 服务项目 / 订单管理 Tab ============ */
+.work-tabs {
+  margin-bottom: 16px;
+}
+.work-tabs :deep(.el-tabs__item) {
+  font-size: 15px;
+  font-weight: 600;
+}
+.order-no-cell {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+}
+.muted-text {
+  color: #c0b9ae;
+}
+.elder-sex {
+  color: #a39c92;
+  font-size: 12px;
+}
+.status-count {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #f5efe9;
+  color: #a39c92;
+  font-size: 12px;
+}
+
+/* ============ 订单详情抽屉 ============ */
+.order-detail .detail-section {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: #fdf9f5;
+  border-radius: 12px;
+}
+.order-detail .section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2d2a26;
+  margin-bottom: 10px;
+}
+.order-detail .d-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+}
+.order-detail .d-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #a39c92;
+}
+.order-detail .d-value {
+  font-size: 13px;
+  color: #2d2a26;
+  text-align: right;
+  word-break: break-all;
+}
+.order-detail .d-value.amount {
+  font-weight: 600;
+  color: #ff6b3d;
+}
+.order-detail .elder-section {
+  border: 1px solid #ffd8bd;
+}
+.order-detail .elder-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d2a26;
+  margin-bottom: 4px;
+}
+.order-detail .elder-tag {
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #ff6b3d;
+  background: #fff1e6;
+}
+.order-detail .health-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border-left: 3px solid #ffb26b;
+}
+.order-detail .health-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6a23c;
+}
+.order-detail .health-icon {
+  font-size: 14px;
+}
+.order-detail .health-text {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #5c564e;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
 }
 
 /* ============ 顶部栏 ============ */

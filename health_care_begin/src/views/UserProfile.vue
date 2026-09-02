@@ -2,13 +2,14 @@
 // ============ 家属个人中心 ============
 // 参考真实 App（美团/饿了么风格）：顶部个人信息卡 + 订单状态条 + 功能宫格 + 设置列表 + 退出登录
 // 说明：后端目前仅有登录/注册接口，订单等数据均为静态假数据（TODO 标注后端接口）
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  User, Location, Star, Service, Wallet, Clock, Van, SuccessFilled,
+  User, Location, Star, Service, Clock, Van, SuccessFilled, CircleClose,
   Lock, Bell, InfoFilled, ArrowRight,
 } from '@element-plus/icons-vue'
+import { listUserOrders } from '@/api/order.js'
 
 const router = useRouter()
 
@@ -21,13 +22,27 @@ const phone = computed(() => {
   return p ? p.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2') : '未绑定手机号'
 })
 
-// TODO: 替换为后端 GET /order/status/count（当前静态假数据）
-const orderStats = [
-  { label: '待支付', count: 1, icon: Wallet },
-  { label: '待服务', count: 0, icon: Clock },
-  { label: '服务中', count: 1, icon: Van },
-  { label: '已完成', count: 12, icon: SuccessFilled },
-]
+/* ---------- 我的订单：状态角标接真（GET /service-order/user/list 全量拉取，前端按状态聚合） ---------- */
+// 点击跳转我的订单页对应筛选：/user/orders?status=N
+const orderCounts = ref({ 0: 0, 1: 0, 2: 0, 3: 0 })
+const loadOrders = async () => {
+  try {
+    const res = await listUserOrders()
+    if (res.success && Array.isArray(res.data)) {
+      const counts = { 0: 0, 1: 0, 2: 0, 3: 0 }
+      res.data.forEach((o) => { if (counts[o.orderStatus] !== undefined) counts[o.orderStatus] += 1 })
+      orderCounts.value = counts
+    }
+  } catch (err) { /* 网络异常由拦截器统一提示，角标保持 0 */ }
+}
+
+const orderStats = computed(() => [
+  { label: '待接单', count: orderCounts.value[0], icon: Clock, status: 0 },
+  { label: '服务中', count: orderCounts.value[1], icon: Van, status: 1 },
+  { label: '已完成', count: orderCounts.value[2], icon: SuccessFilled, status: 2 },
+  { label: '已取消', count: orderCounts.value[3], icon: CircleClose, status: 3 },
+])
+const openOrders = (status) => router.push({ path: '/user/orders', query: status != null ? { status } : {} })
 
 // TODO: 老人/评价数据替换为后端接口（当前静态假数据）
 // path 非空 = 真实路由跳转；空 = 建设中占位提示
@@ -61,6 +76,8 @@ const handleLogout = () => {
   ElMessage.success('已退出登录')
   router.push('/login')
 }
+
+onMounted(loadOrders)
 </script>
 
 <template>
@@ -87,12 +104,12 @@ const handleLogout = () => {
       <div class="card order-card">
         <div class="card-head">
           <span class="card-title">我的订单</span>
-          <span class="card-more" @click="todo('全部订单')">
+          <span class="card-more" @click="openOrders(null)">
             查看全部订单<el-icon class="arrow"><ArrowRight /></el-icon>
           </span>
         </div>
         <div class="order-stats">
-          <div v-for="s in orderStats" :key="s.label" class="stat" @click="todo(`我的订单-${s.label}`)">
+          <div v-for="s in orderStats" :key="s.label" class="stat" @click="openOrders(s.status)">
             <div class="stat-icon">
               <el-icon :size="26"><component :is="s.icon" /></el-icon>
               <span v-if="s.count" class="stat-badge">{{ s.count }}</span>
