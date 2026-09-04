@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, WarningFilled } from '@element-plus/icons-vue'
 import { listUserOrders, cancelOrder } from '@/api/order.js'
+import OrderCommentDialog from '@/components/OrderCommentDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,6 +98,15 @@ const onCancel = (row) => {
   }).catch(() => {})
 }
 
+/* ---------- 评价已完成订单（一单一评，后端查重；commentScore null=未评） ---------- */
+const commentDialogRef = ref(null)
+const commentTarget = ref(null)
+const openComment = (row) => {
+  commentTarget.value = row
+  commentDialogRef.value?.open()
+}
+const onCommentSuccess = () => loadOrders()
+
 onMounted(() => {
   // 从个人中心状态条跳入：/user/orders?status=N 定位到对应筛选
   const s = Number(route.query.status)
@@ -158,6 +168,11 @@ onMounted(() => {
             <el-button v-if="o.orderStatus === 0" type="danger" plain size="small" :loading="cancelingId === o.orderId" @click="onCancel(o)">
               取消订单
             </el-button>
+            <!-- 已完成未评出「去评价」，已评出状态标记（commentScore null=未评） -->
+            <el-button v-if="o.orderStatus === 2 && o.commentScore == null" type="primary" plain size="small" @click="openComment(o)">
+              去评价
+            </el-button>
+            <span v-if="o.orderStatus === 2 && o.commentScore != null" class="rated-tip">已评价 ★{{ o.commentScore }}</span>
             <el-button type="primary" plain size="small" @click="openOrderDetail(o)">查看详情</el-button>
           </div>
         </div>
@@ -203,6 +218,24 @@ onMounted(() => {
           <div class="d-row"><span class="d-label">订单备注</span><span class="d-value">{{ currentOrder.remark || '无' }}</span></div>
         </div>
 
+        <!-- 我的评价（仅已完成订单展示） -->
+        <div v-if="currentOrder.orderStatus === 2" class="detail-section">
+          <div class="section-title">我的评价</div>
+          <template v-if="currentOrder.commentScore != null">
+            <div class="rated-box">
+              <el-rate :model-value="currentOrder.commentScore" disabled />
+              <div v-if="currentOrder.commentContent" class="rated-content">{{ currentOrder.commentContent }}</div>
+              <div v-else class="rated-empty">该订单未填写文字评价</div>
+            </div>
+          </template>
+          <template v-else>
+            <div class="unrated-box">
+              <span class="unrated-tip">本次服务体验如何？给商家一个评价吧</span>
+              <el-button type="primary" plain size="small" @click="openComment(currentOrder)">去评价</el-button>
+            </div>
+          </template>
+        </div>
+
         <!-- 待接单取消提示 -->
         <div v-if="currentOrder.orderStatus === 0" class="cancel-tip">
           <el-icon class="tip-icon"><WarningFilled /></el-icon>
@@ -221,6 +254,9 @@ onMounted(() => {
         </div>
       </template>
     </el-drawer>
+
+    <!-- 评价对话框（我的订单页共用组件） -->
+    <OrderCommentDialog ref="commentDialogRef" :order="commentTarget" @success="onCommentSuccess" />
   </div>
 </template>
 
@@ -408,5 +444,44 @@ onMounted(() => {
   justify-content: flex-end;
   align-items: center;
   width: 100%;
+}
+
+/* ============ 我的评价(卡片/抽屉) ============ */
+.rated-tip {
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: #fff3e8;
+  color: #ff7a45;
+  font-size: 12px;
+  line-height: 22px;
+}
+.rated-box {
+  padding: 2px 0;
+}
+.rated-box .el-rate {
+  height: auto;
+}
+.rated-content {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #2d2a26;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.rated-empty {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #b9b2a8;
+}
+.unrated-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.unrated-tip {
+  font-size: 13px;
+  color: #a39c92;
 }
 </style>

@@ -97,4 +97,14 @@ public class UserOrderVO {
      * 服务地址全文（省市区+详细；未选择时为 null）
      */
     private String addressText;
+
+    /**
+     * 该订单的已评评分（1~5）;null = 未评价,前端据此出「去评价」/「已评价」态
+     */
+    private Integer commentScore;
+
+    /**
+     * 该订单的已评内容(选填可为 null),已评回显用
+     */
+    private String commentContent;
 }

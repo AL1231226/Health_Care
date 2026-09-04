@@ -13,6 +13,7 @@ const routes = [
       { path: 'home', component: () => import('../views/UserHome.vue') },
       { path: 'profile', component: () => import('../views/UserProfile.vue') },
       { path: 'orders', component: () => import('../views/UserOrders.vue') },
+      { path: 'comments', component: () => import('../views/MyComments.vue') },
       { path: 'address', component: () => import('../views/UserAddress.vue') },
       { path: 'elder', component: () => import('../views/UserElder.vue') },
       { path: 'merchants', component: () => import('../views/ServiceProviders.vue') },

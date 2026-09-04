@@ -9,12 +9,14 @@ import com.example.Elderly_care_Platfrom.dao.MerchantOrderVO;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.dao.UserOrderVO;
 import com.example.Elderly_care_Platfrom.entity.ElderProfile;
+import com.example.Elderly_care_Platfrom.entity.ServiceComment;
 import com.example.Elderly_care_Platfrom.entity.ServiceItem;
 import com.example.Elderly_care_Platfrom.entity.ServiceOrder;
 import com.example.Elderly_care_Platfrom.entity.ServiceProvider;
 import com.example.Elderly_care_Platfrom.entity.SysUser;
 import com.example.Elderly_care_Platfrom.entity.UserAddress;
 import com.example.Elderly_care_Platfrom.mapper.ElderProfileMapper;
+import com.example.Elderly_care_Platfrom.mapper.ServiceCommentMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceItemMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceOrderMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceProviderMapper;
@@ -60,6 +62,8 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
     private SysUserMapper sysUserMapper;
     @Resource
     private ServiceProviderMapper serviceProviderMapper;
+    @Resource
+    private ServiceCommentMapper serviceCommentMapper;
 
     @Override
     public Result createOrder(ServiceOrder order) {
@@ -257,12 +261,18 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
         Map<Long, ServiceItem> itemMap = toMap(serviceItemMapper.selectBatchIds(itemIds), ServiceItem::getItemId);
         Map<Long, ElderProfile> elderMap = toMap(elderProfileMapper.selectBatchIds(elderIds), ElderProfile::getElderId);
         Map<Long, UserAddress> addressMap = toMap(userAddressMapper.selectBatchIds(addressIds), UserAddress::getAddrId);
+        // 订单已评记录一次批量查出（一单一评,order_id 唯一索引保证至多一条）
+        List<ServiceComment> comments = serviceCommentMapper.selectList(
+                new QueryWrapper<ServiceComment>().in("order_id", orders.stream()
+                        .map(ServiceOrder::getOrderId).collect(Collectors.toList())));
+        Map<Long, ServiceComment> commentMap = toMap(comments, ServiceComment::getOrderId);
 
         for (ServiceOrder o : orders) {
             ServiceProvider provider = o.getProviderId() == null ? null : providerMap.get(o.getProviderId());
             ServiceItem item = o.getItemId() == null ? null : itemMap.get(o.getItemId());
             ElderProfile elder = o.getElderId() == null ? null : elderMap.get(o.getElderId());
             UserAddress addr = o.getAddressId() == null ? null : addressMap.get(o.getAddressId());
+            ServiceComment comment = commentMap.get(o.getOrderId());
 
             UserOrderVO vo = new UserOrderVO();
             vo.setOrderId(o.getOrderId());
@@ -280,6 +290,8 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
             vo.setElderId(elder == null ? null : elder.getElderId());
             vo.setElderName(elder == null ? null : elder.getElderName());
             vo.setAddressText(addressText(addr));
+            vo.setCommentScore(comment == null || comment.getScore() == null ? null : comment.getScore());
+            vo.setCommentContent(comment == null ? null : comment.getContent());
             result.add(vo);
         }
         return Result.ok(result, (long) result.size());

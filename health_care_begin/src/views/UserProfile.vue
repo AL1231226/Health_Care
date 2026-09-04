@@ -49,7 +49,7 @@ const openOrders = (status) => router.push({ path: '/user/orders', query: status
 const tools = [
   { label: '老人管理', icon: User, desc: '家人健康档案', path: '/user/elder' },
   { label: '地址管理', icon: Location, desc: '常用服务地址', path: '/user/address' },
-  { label: '我的评价', icon: Star, desc: '服务评分晒单', path: '' },
+  { label: '我的评价', icon: Star, desc: '服务评分晒单', path: '/user/comments' },
   { label: '联系客服', icon: Service, desc: '在线/电话咨询', path: '' },
 ]
 
