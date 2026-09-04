@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.Elderly_care_Platfrom.dao.CommentWithUserVO;
 import com.example.Elderly_care_Platfrom.dao.ProviderDetailVO;
-import com.example.Elderly_care_Platfrom.dao.ProviderWithItemsVO;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceCategory;
 import com.example.Elderly_care_Platfrom.entity.ServiceComment;
@@ -95,10 +94,10 @@ public class ServiceCategoryServiceImpl extends ServiceImpl<ServiceCategoryMappe
         Map<Long, List<ServiceComment>> commentsByProvider = comments.stream()
                 .collect(Collectors.groupingBy(ServiceComment::getProviderId));
 
-        List<ProviderWithItemsVO> voList = new ArrayList<>(providers.size());
+        List<ProviderDetailVO> voList = new ArrayList<>(providers.size());
         for (ServiceProvider provider : providers) {
             List<ServiceComment> providerComments = commentsByProvider.getOrDefault(provider.getProviderId(), Collections.emptyList());
-            ProviderWithItemsVO vo = new ProviderWithItemsVO();
+            ProviderDetailVO vo = new ProviderDetailVO();
             vo.setProviderId(provider.getProviderId());
             vo.setProviderName(provider.getProviderName());
             vo.setLogo(provider.getLogo());
