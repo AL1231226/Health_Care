@@ -82,4 +82,4 @@ cd Elderly_care_Platfrom && ./mvnw -q compile # 编译验证
 
 **改动纪律**:代码/库/配置改完 → 更新 `CHANGELOG.md`(新节置顶)→ 可顺手在本文档「完成地图/下一轮」同步勾选。
 
-**当前 git 状态**:master 分支仅 1 个 init commit,大量改动(前后端订单功能等)未提交;`repomix-output.md` 为后端旧快照(2026-09-02 前),看代码以后端目录为准。
+**当前 git 状态**:master 分支已按功能分批提交(最近:19d18ee 购物车+拆单结算、36e3cc6 购物车设计文档、01384a4 评价闭环、c192eb1 VO 合并),当前工作树干净;`repomix-output.md` 为后端旧快照(2026-09-02 前),看代码以后端目录为准。
