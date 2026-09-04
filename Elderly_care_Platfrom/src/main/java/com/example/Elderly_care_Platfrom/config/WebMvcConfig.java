@@ -18,6 +18,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
         //添加拦截器：需要登录的业务接口（auth 登录/注册放行）
         registry.addInterceptor(authInterceptor)
                 //拦截的请求
-                .addPathPatterns("/address/**", "/elder-profile/**", "/service-provider/**", "/sys-user/**", "/service-item/**", "/service-order/**", "/service-comment/**");
+                .addPathPatterns("/address/**", "/elder-profile/**", "/service-provider/**", "/sys-user/**", "/service-item/**", "/service-order/**", "/service-comment/**", "/service-cart/**");
     }
 }

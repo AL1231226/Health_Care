@@ -15,7 +15,7 @@ const userName = computed(() => userInfo.userName || '家属')
 // 右侧：搜索 / 消息铃铛 / 个人中心（头像下拉）保持不变
 const navItems = [
   { label: '首页', path: '/user/home' },
-  { label: '购物车', path: '' },
+  { label: '购物车', path: '/user/cart' },
 ]
 const handleNav = (item) => {
   if (item.path) {

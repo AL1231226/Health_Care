@@ -19,6 +19,7 @@ const routes = [
       { path: 'merchants', component: () => import('../views/ServiceProviders.vue') },
       { path: 'merchant/:id', component: () => import('../views/ProviderDetail.vue') },
       { path: 'order', component: () => import('../views/OrderConfirm.vue') },
+      { path: 'cart', component: () => import('../views/CartPage.vue') },
     ],
   },
   { path: '/admin/home', component: () => import('../views/AdminHome.vue') },

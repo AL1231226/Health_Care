@@ -1,7 +1,7 @@
 # 项目实时进度文档（颐养平台 · 居家养老服务预约）
 
 > 本文档随开发持续更新,新会话先读它 + `CLAUDE.md` + `CHANGELOG.md`,即可接手。
-> 最后更新:2026-09-04(家属端发表评价闭环落地:一单一评挂 order_id,商家分实时聚合闭环)
+> 最后更新:2026-09-04(家属端购物车落地:跨商家加购 + 勾选结算按「商家×项目」拆单,维持一单一项目模型)
 
 ## 一、项目全貌
 
@@ -9,9 +9,9 @@
 |---|---|---|
 | 前端 | `health_care_begin` | Vue 3 `<script setup>` + Element Plus + vue-router + Vite + axios(无 Pinia,`@`→`src`,api 按后端 Controller 一文件一模块) |
 | 后端 | `Elderly_care_Platfrom`(同级目录) | Spring Boot + MyBatis-Plus + MySQL,包 `com.example.Elderly_care_Platfrom` |
-| 数据库 | `health_data`(root/123456,客户端 `/d/MySQL/server/bin/mysql`) | 9 张表齐:admin / sys_user / elder_profile / user_address / service_category / service_provider / service_item / service_order / service_comment |
+| 数据库 | `health_data`(root/123456,客户端 `/d/MySQL/server/bin/mysql`) | 10 张表齐:admin / sys_user / elder_profile / user_address / service_category / service_provider / service_item / service_order / service_comment / service_cart |
 
-后端约定:统一返回 `dao/Result`(`{success,errorMsg,data,total}`,HTTP 恒 200);JWT 拦截在 `config/WebMvcConfig`(公开:`/auth/**`、`/service-category/**`;其余业务接口需登录,含 `/service-order/**`);Controller 薄壳 + Service 接口/Impl(QueryWrapper);分页未启用(列表全量返回);建表脚本统一存 `Elderly_care_Platfrom/src/main/resources/sql/`。**所有改动必须同步记入 `CHANGELOG.md`**(前端目录,按日期节,新节置顶)。
+后端约定:统一返回 `dao/Result`(`{success,errorMsg,data,total}`,HTTP 恒 200);JWT 拦截在 `config/WebMvcConfig`(公开:`/auth/**`、`/service-category/**`;其余业务接口需登录,含 `/service-order/**`、`/service-cart/**`);Controller 薄壳 + Service 接口/Impl(QueryWrapper);分页未启用(列表全量返回);建表脚本统一存 `Elderly_care_Platfrom/src/main/resources/sql/`。**所有改动必须同步记入 `CHANGELOG.md`**(前端目录,按日期节,新节置顶)。
 
 ## 二、三角色 × 模块 完成地图
 
@@ -32,7 +32,7 @@
 | 商家详情页 | ✅ | `/service-category/provider-detail`、`provider-comments`(评价展示) |
 | 下单确认页 OrderConfirm | ✅ | 老人必选(默认第一位)+ 地址默认老人常驻地址可下拉改 + 电话完整显示;**提交订单已接后端**;成功页切换成功卡 |
 | 我的订单/个人中心 | ✅ | 新页 `UserOrders.vue`(`/user/orders`):状态筛选(角标)+ 订单卡片 + 详情抽屉 + 取消(仅0待接单→3);UserProfile 状态条接真四格角标(待接单/服务中/已完成/已取消),点击跳对应筛选 |
-| 购物车 | ⏳ | UserLayout 导航有入口;OrderConfirm 有「加入购物车」按钮(占位) |
+| 购物车 | ✅ | 2026-09-04 落地:跨商家加购(商家详情行 +1 / 确认页带数量入车)→ `/user/cart` 商家分组页(勾选默认全选、改量、删行、失效标灰禁选)→ 勾选 `?cartIds=` 进确认页批量结算,后端按「商家×项目」拆单(一勾选行一订单,同商家多项目=多单),整批统一老人/地址/电话/备注,事务内清购物车行;UserLayout 导航入口接真 |
 | 发表评价 | ✅ | 2026-09-04 落地:已完成(2)订单卡片/抽屉「去评价」+ 我的评价页双区(待评价/已评价),一单一评挂 order_id(唯一索引),商家分实时聚合闭环;不回填 item 冗余列 |
 
 ### 商家端(✅ 服务 + 订单 双 Tab 工作台 `MerchantHome.vue`)
@@ -56,13 +56,14 @@
 
 **评价闭环(2026-09-04)**:家属端对**已完成(2)**订单发表评价(`POST /service-comment/create`),一单一评(`service_comment.order_id` 唯一索引 `uk_order_id` 双保险;星级 1~5 必填、内容选填限 500);校验仅限本人订单、未评订单,item/provider 服务端从订单行定值不信任请求体;评价写入后商家详情/列表/商家详情评价列表的评分(**全部评价 score 实时平均**)自动更新,无需任何聚合写入;入口:我的订单卡片/抽屉「去评价」+已评回显(星级+原文),个人中心「我的评价」(`/user/comments`)双区页——待评价区 = 已完成未评订单直接发起,已评价区 = `GET /service-comment/my` 历史列表;**不回填** `service_item.score/sales` 冗余列(维持不维护)。
 
+**购物车与按商家拆单结算(2026-09-04)**:表 `service_cart` 一行一项目(唯一 `uk_cart_user_item(user_id,item_id)`,重复加购数量累加上限 99,item 删除 FK 级联清行);`/service-cart/**` 五接口全挂 token 归属——add(须上架)/list(联查商家服务名并标 `itemStatus`)/quantity/remove/**checkout**;checkout 逐行归属校验 + **现查** item 任一失效整批拒绝点名,逐行**复用下单 createOrder 同源校验/快照**生成订单(@Transactional 失败整体回滚无孤儿单),成功清购物车行;拆单按「商家×项目」= 一勾选行一订单(含同商家多项目各成单),维持一单一项目模型不加明细表;入口:商家详情服务行「加入购物车」+ 确认页带量入车 + CartPage(`/user/cart`)勾选 → 确认页 `cartIds` 批量模式(整批统一老人/地址/电话/备注,按商家分组标注将生成 N 张订单);冒烟测试订单已清理。
+
 **健康信息决策**:老人健康备注(**实时联查**,不做快照,家属更新商家即时可见);仅该单商家订单详情可见;老人档案删除后订单详情提示「档案已删」。
 
 ## 四、下一轮候选(按惯例的小步推进,一次一个)
 
-1. **购物车**(加购→结算按项目/商家拆单;OrderConfirm「加入购物车」按钮接真)
-2. 管理员订单管理;角色权限统一校验;商家店铺资料编辑
-3. 可选延伸(评价相关,不急):商家端查看「我的评价」列表、管理员评价删除(AdminHome 预留)、商家端统计卡「平均分」口径修正(现按从未维护的 item.score 算而空置,应改按商家评价平均或移除)
+1. 管理员订单管理;角色权限统一校验;商家店铺资料编辑
+2. 可选延伸(评价相关,不急):商家端查看「我的评价」列表、管理员评价删除(AdminHome 预留)、商家端统计卡「平均分」口径修正(现按从未维护的 item.score 算而空置,应改按商家评价平均或移除)
 
 ## 五、环境速查
 

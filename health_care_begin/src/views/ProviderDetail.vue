@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Location, Phone, User } from '@element-plus/icons-vue'
 import { getProviderDetail, getProviderComments } from '@/api/provider.js'
+import { addToCart } from '@/api/cart.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,6 +78,30 @@ const onItemClick = (item) => {
       providerName: detail.value.providerName,
     },
   })
+}
+
+// 服务行「加入购物车」：+1 份直接加购（该页公开可逛，未登录先引导登录）
+const addingItemId = ref(null)
+const onAddToCart = async (item) => {
+  if (!localStorage.getItem('token')) {
+    ElMessage.warning('请先登录后再加购')
+    router.push('/login')
+    return
+  }
+  if (addingItemId.value != null) return
+  addingItemId.value = item.itemId
+  try {
+    const result = await addToCart(item.itemId, 1)
+    if (result.success) {
+      ElMessage.success(`已将「${item.itemName}」加入购物车`)
+    } else {
+      ElMessage.error(result.errorMsg || '加入购物车失败')
+    }
+  } catch (err) {
+    ElMessage.error('加入购物车失败，请稍后重试')
+  } finally {
+    addingItemId.value = null
+  }
 }
 
 // 地址拼接：省市区 + 详细地址，取有值的部分；全空兜底「—」
@@ -177,7 +202,16 @@ const avatarStyle = (name) => {
             <div class="price">
               <b>¥{{ item.price }}</b>
               <i>起/{{ item.unit }}</i>
-              <el-button size="small" round class="buy-btn" @click.stop="onItemClick(item)">购买</el-button>
+              <div class="row-btns">
+                <el-button
+                  size="small"
+                  round
+                  class="add-cart-btn"
+                  :loading="addingItemId === item.itemId"
+                  @click.stop="onAddToCart(item)"
+                >加入购物车</el-button>
+                <el-button size="small" round class="buy-btn" @click.stop="onItemClick(item)">购买</el-button>
+              </div>
             </div>
           </div>
           <div v-if="!detail.items.length" class="item-empty">该商家暂未上架服务</div>
@@ -400,8 +434,30 @@ const avatarStyle = (name) => {
   font-style: normal;
   color: #a39c92;
 }
+.row-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .buy-btn {
   margin: 0;
+  background: #fff2ec;
+  border-color: #ffd6bd;
+  color: #ff6b3d;
+}
+.buy-btn:hover {
+  background: #ff6b3d;
+  border-color: #ff6b3d;
+  color: #fff;
+}
+.add-cart-btn {
+  margin: 0;
+  color: #ff6b3d;
+}
+.add-cart-btn:hover {
+  color: #fff;
+  background: #ff6b3d;
+  border-color: #ff6b3d;
 }
 .item-empty {
   padding: 20px 8px;
