@@ -11,6 +11,7 @@ import {
 import { listProviders, reviewProvider, toggleProviderStatus } from '@/api/provider.js'
 import { listCategory } from '@/api/category.js'
 import { listSysUsers, updateUserStatus } from '@/api/user.js'
+import { listAdminOrders } from '@/api/order.js'
 
 const router = useRouter()
 
@@ -26,7 +27,7 @@ const menus = [
   { key: 'item', label: '服务管理', icon: List },
   { key: 'category', label: '分类管理', icon: Menu },
   { key: 'comment', label: '评价管理', icon: Star },
-  { key: 'order', label: '订单管理', icon: Tickets, building: true },
+  { key: 'order', label: '订单管理', icon: Tickets },
   { key: 'setting', label: '系统设置', icon: Setting, building: true },
 ]
 const activeMenu = ref('dashboard')
@@ -213,6 +214,90 @@ const removeComment = (row) => {
   }).catch(() => {})
 }
 
+/* ---------- 订单管理（全平台只读监督，GET /service-order/admin/list 真实数据；状态筛选/关键词过滤在前端做） ---------- */
+const orderLoading = ref(false)
+const orders = ref([])
+const ALL_STATUS = -1 // 筛选哨兵：全部
+const orderFilter = ref(ALL_STATUS)
+const orderKeyword = ref('')
+const orderStatusTabs = [
+  { value: ALL_STATUS, label: '全部' },
+  { value: 0, label: '待接单' },
+  { value: 1, label: '服务中' },
+  { value: 2, label: '已完成' },
+  { value: 3, label: '已取消' },
+]
+const orderStatusMap = {
+  0: { text: '待接单', type: 'warning' },
+  1: { text: '服务中', type: 'primary' },
+  2: { text: '已完成', type: 'success' },
+  3: { text: '已取消', type: 'info' },
+}
+const orderCounts = computed(() => {
+  const counts = { 0: 0, 1: 0, 2: 0, 3: 0 }
+  orders.value.forEach((o) => { if (counts[o.orderStatus] !== undefined) counts[o.orderStatus] += 1 })
+  return counts
+})
+// 状态 + 关键词双重过滤（关键词匹配 商家/服务/老人/家属/订单号 任一字段，与状态筛选 AND）
+const filteredOrders = computed(() => {
+  const kw = orderKeyword.value.trim().toLowerCase()
+  return orders.value.filter((o) => {
+    if (orderFilter.value !== ALL_STATUS && o.orderStatus !== orderFilter.value) return false
+    if (!kw) return true
+    return [o.providerName, o.itemName, o.elderName, o.familyName, o.orderNo]
+      .some((f) => f != null && String(f).toLowerCase().includes(kw))
+  })
+})
+// 看板「待接单新订单」卡数据（全量订单已按下单时间倒序）
+const pendingOrders = computed(() => orders.value.filter((o) => o.orderStatus === 0))
+const loadOrders = async () => {
+  orderLoading.value = true
+  try {
+    const res = await listAdminOrders()
+    if (res.success) {
+      orders.value = res.data || []
+    } else {
+      ElMessage.error(res.errorMsg || '加载订单失败')
+    }
+  } catch (err) { /* 拦截器已统一提示 */ } finally {
+    orderLoading.value = false
+  }
+}
+// 看板/订单页跳转：切菜单并选中状态筛选
+const goOrderTab = (status) => {
+  orderFilter.value = status
+  activeMenu.value = 'order'
+}
+
+/* ---------- 订单详情抽屉（只读监督） ---------- */
+const drawerVisible = ref(false)
+const currentOrder = ref(null)
+const genderText = (g) => (Number(g) === 1 ? '男' : Number(g) === 0 ? '女' : '—')
+const ageOf = (d) => {
+  if (!d) return null
+  const birth = new Date(d)
+  if (Number.isNaN(birth.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - birth.getFullYear()
+  if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age -= 1
+  return age
+}
+const ageText = (row) => {
+  const age = ageOf(row.birthDate)
+  return age != null ? `${age}岁` : '年龄未知'
+}
+const fmtDateTime = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return String(v)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+const openOrderDetail = (row) => {
+  currentOrder.value = row
+  drawerVisible.value = true
+}
+
 /* ---------- 顶栏：搜索/消息占位 + 退出登录 ---------- */
 const handleLogout = () => {
   ElMessageBox.confirm('确定退出登录吗？', '退出确认', {
@@ -237,11 +322,12 @@ onMounted(() => {
     const saved = JSON.parse(localStorage.getItem('user_info') || '{}')
     if (saved.username) adminName.value = saved.username
   } catch (err) { /* 兜底默认值 */ }
-  // 加载数据（分类映射 + 待审核商家 + 全部商家 + 家属列表）
+  // 加载数据（分类映射 + 待审核商家 + 全部商家 + 家属列表 + 全平台订单；订单数据看板/订单页共用一份）
   loadCategories()
   loadPending()
   loadProviders()
   loadUsers()
+  loadOrders()
 })
 </script>
 
@@ -325,6 +411,24 @@ onMounted(() => {
                   <el-button size="small" type="success" plain @click="handleReview(p, true)">通过</el-button>
                   <el-button size="small" type="danger" plain @click="handleReview(p, false)">驳回</el-button>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card todo-card">
+            <div class="card-head">
+              <h3>待接单新订单</h3>
+              <el-button link type="primary" @click="goOrderTab(0)">查看全部 →</el-button>
+            </div>
+            <div class="todo-list" v-loading="orderLoading">
+              <div class="todo-empty" v-if="!pendingOrders.length && !orderLoading">🎉 没有待接单的新订单</div>
+              <div v-for="o in pendingOrders" :key="o.orderId" class="todo-item todo-order" @click="openOrderDetail(o)">
+                <div class="todo-info">
+                  <span class="todo-name">{{ o.itemName || '服务已删除' }}</span>
+                  <span class="tag">{{ o.providerName || '商家已注销' }}</span>
+                  <span class="todo-meta">¥{{ o.totalPrice }} · {{ fmtDateTime(o.createTime) }}</span>
+                </div>
+                <el-tag :type="orderStatusMap[o.orderStatus]?.type" size="small">{{ orderStatusMap[o.orderStatus]?.text }}</el-tag>
               </div>
             </div>
           </section>
@@ -512,12 +616,130 @@ onMounted(() => {
           </el-table>
         </section>
 
+        <!-- ====== 订单管理（全平台只读监督） ====== -->
+        <section v-else-if="activeMenu === 'order'" class="card">
+          <div class="card-head">
+            <h3>全平台订单（{{ orders.length }}）</h3>
+            <el-button class="primary-btn" type="primary" :loading="orderLoading" @click="loadOrders">刷新</el-button>
+          </div>
+          <div class="order-bar">
+            <div class="filter-group">
+              <span
+                v-for="t in orderStatusTabs"
+                :key="t.value"
+                class="filter-capsule"
+                :class="{ active: orderFilter === t.value }"
+                @click="orderFilter = t.value"
+              >
+                {{ t.label }}
+                <span v-if="t.value !== ALL_STATUS" class="filter-count">{{ orderCounts[t.value] || 0 }}</span>
+              </span>
+            </div>
+            <el-input
+              v-model="orderKeyword"
+              class="order-search"
+              placeholder="搜索商家 / 服务 / 老人 / 家属 / 订单号"
+              :prefix-icon="Search"
+              clearable
+            />
+          </div>
+          <el-table v-loading="orderLoading" :data="filteredOrders" stripe>
+            <el-table-column label="订单号" width="185">
+              <template #default="{ row }"><span class="order-no-cell">{{ row.orderNo }}</span></template>
+            </el-table-column>
+            <el-table-column label="服务项目" min-width="130" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.itemName || '服务已删除' }}</template>
+            </el-table-column>
+            <el-table-column label="商家" min-width="120" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.providerName || '商家已注销' }}</template>
+            </el-table-column>
+            <el-table-column label="下单家属" width="105" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.familyName || '账号已删除' }}</template>
+            </el-table-column>
+            <el-table-column label="服务老人" width="160">
+              <template #default="{ row }">
+                <span v-if="row.elderName">{{ row.elderName }}<span class="elder-sex">（{{ genderText(row.gender) }} · {{ ageText(row) }}）</span></span>
+                <span v-else class="muted-text">档案已删</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="金额" width="150">
+              <template #default="{ row }">
+                <div class="amount-cell">
+                  <span class="price">¥{{ row.totalPrice }}</span>
+                  <span class="amount-sub">¥{{ row.unitPrice }} × {{ row.quantity }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="95">
+              <template #default="{ row }">
+                <el-tag :type="orderStatusMap[row.orderStatus]?.type" size="small" effect="light">
+                  {{ orderStatusMap[row.orderStatus]?.text || '未知' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="下单时间" width="150">
+              <template #default="{ row }">{{ fmtDateTime(row.createTime) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openOrderDetail(row)">详情</el-button>
+              </template>
+            </el-table-column>
+            <template #empty><el-empty description="暂无相关订单" /></template>
+          </el-table>
+        </section>
+
         <!-- ====== 建设中模块 ====== -->
         <section v-else class="card building-card">
           <h3>🛠️ {{ currentMenu.label }}建设中</h3>
-          <p>{{ currentMenu.label === '订单管理' ? '订单表尚未设计，预留模块位，等订单模块落地后填充' : '该模块待后续版本实现' }}</p>
+          <p>该模块待后续版本实现</p>
         </section>
       </main>
+
+      <!-- ======== 订单详情抽屉（管理员只读监督：含下单家属/服务老人健康备注） ======== -->
+      <el-drawer v-model="drawerVisible" title="订单详情" size="460px">
+        <div v-if="currentOrder" class="order-detail">
+          <!-- 服务信息 -->
+          <div class="detail-section">
+            <div class="section-title">服务信息</div>
+            <div class="d-row"><span class="d-label">服务项目</span><span class="d-value">{{ currentOrder.itemName || '服务已删除' }}</span></div>
+            <div class="d-row"><span class="d-label">下单家属</span><span class="d-value">{{ currentOrder.familyName || '账号已删除' }}</span></div>
+            <div class="d-row"><span class="d-label">服务商家</span><span class="d-value">{{ currentOrder.providerName || '商家已注销' }}</span></div>
+            <div class="d-row"><span class="d-label">单价 × 数量</span><span class="d-value">¥{{ currentOrder.unitPrice }} × {{ currentOrder.quantity }}</span></div>
+            <div class="d-row"><span class="d-label">订单金额</span><span class="d-value amount">¥{{ currentOrder.totalPrice }}</span></div>
+            <div class="d-row"><span class="d-label">订单号</span><span class="d-value order-no-cell">{{ currentOrder.orderNo }}</span></div>
+            <div class="d-row"><span class="d-label">下单时间</span><span class="d-value">{{ fmtDateTime(currentOrder.createTime) }}</span></div>
+          </div>
+
+          <!-- 服务老人（健康备注供管理员协调投诉参考） -->
+          <div class="detail-section elder-section">
+            <div class="section-title">服务老人</div>
+            <template v-if="currentOrder.elderName">
+              <div class="elder-name">
+                {{ currentOrder.elderName }}
+                <span class="elder-tag">
+                  {{ genderText(currentOrder.gender) }} · {{ ageText(currentOrder) }}
+                </span>
+              </div>
+              <div class="d-row"><span class="d-label">老人电话</span><span class="d-value">{{ currentOrder.elderPhone || '未填写' }}</span></div>
+              <div class="health-box">
+                <div class="health-title"><el-icon class="health-icon"><Warning /></el-icon>健康备注 / 护理注意事项</div>
+                <p class="health-text">{{ currentOrder.healthNote || '家属未填写健康备注' }}</p>
+              </div>
+            </template>
+            <div v-else class="muted-text">该老人档案已被删除，无法查看健康信息</div>
+          </div>
+
+          <!-- 服务安排 -->
+          <div class="detail-section">
+            <div class="section-title">服务安排</div>
+            <div class="d-row"><span class="d-label">预约时间</span><span class="d-value">{{ currentOrder.serviceTime ? fmtDateTime(currentOrder.serviceTime) : '未预约（下单后沟通）' }}</span></div>
+            <div class="d-row"><span class="d-label">服务地址</span><span class="d-value">{{ currentOrder.addressText || '未选择（下单后电话沟通）' }}</span></div>
+            <div class="d-row"><span class="d-label">联系电话</span><span class="d-value">{{ currentOrder.contactPhone }}</span></div>
+            <div class="d-row"><span class="d-label">订单备注</span><span class="d-value">{{ currentOrder.remark || '无' }}</span></div>
+          </div>
+        </div>
+      </el-drawer>
     </div>
   </div>
 </template>
@@ -864,6 +1086,163 @@ onMounted(() => {
 .building-card p {
   color: #a39c92;
   font-size: 13px;
+}
+
+/* ============ 订单管理 ============ */
+.order-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.filter-capsule {
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: #f6f2ed;
+  color: #8a8378;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.filter-capsule:hover {
+  background: #fdf2ea;
+  color: #ff7a45;
+}
+.filter-capsule.active {
+  background: linear-gradient(135deg, #ffa05f, #ff7a45);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(255, 122, 69, 0.25);
+}
+.filter-count {
+  margin-left: 5px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #ff7a45;
+  font-size: 11px;
+}
+.filter-capsule.active .filter-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.order-search {
+  width: 300px;
+}
+.order-no-cell {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+}
+.muted-text {
+  color: #c0b9ae;
+}
+.elder-sex {
+  color: #a39c92;
+  font-size: 12px;
+}
+.amount-cell {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+}
+.amount-sub {
+  font-size: 11px;
+  color: #b5aca1;
+}
+/* 看板待接单行：整行可点看详情 */
+.todo-order {
+  cursor: pointer;
+  border-radius: 8px;
+}
+.todo-order:hover {
+  background: #fdf8f3;
+}
+
+/* ============ 订单详情抽屉 ============ */
+.order-detail .detail-section {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: #fdf9f5;
+  border-radius: 12px;
+}
+.order-detail .section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2d2a26;
+  margin-bottom: 10px;
+}
+.order-detail .d-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+}
+.order-detail .d-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #a39c92;
+}
+.order-detail .d-value {
+  font-size: 13px;
+  color: #2d2a26;
+  text-align: right;
+  word-break: break-all;
+}
+.order-detail .d-value.amount {
+  font-weight: 600;
+  color: #ff6b3d;
+}
+.order-detail .elder-section {
+  border: 1px solid #ffd8bd;
+}
+.order-detail .elder-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d2a26;
+  margin-bottom: 4px;
+}
+.order-detail .elder-tag {
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #ff6b3d;
+  background: #fff1e6;
+}
+.order-detail .health-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border-left: 3px solid #ffb26b;
+}
+.order-detail .health-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6a23c;
+}
+.order-detail .health-icon {
+  font-size: 14px;
+}
+.order-detail .health-text {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #5c564e;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* ============ 响应式 ============ */

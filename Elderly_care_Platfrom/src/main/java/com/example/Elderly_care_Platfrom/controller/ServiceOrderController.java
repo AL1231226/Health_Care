@@ -57,4 +57,10 @@ public class ServiceOrderController {
     public Result updateStatus(@PathVariable Long orderId, @RequestParam Integer status) {
         return serviceOrderService.updateOrderStatus(orderId, status);
     }
+
+    /** 管理员端：全平台订单列表（只读监督，仅管理员 role=2 可调，其余角色「无权限」） */
+    @GetMapping("/admin/list")
+    public Result adminList() {
+        return serviceOrderService.listAdminOrders();
+    }
 }

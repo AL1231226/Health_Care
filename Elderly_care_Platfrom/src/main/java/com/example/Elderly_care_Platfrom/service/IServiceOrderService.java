@@ -48,4 +48,10 @@ public interface IServiceOrderService extends IService<ServiceOrder> {
      * @param orderId 订单ID
      */
     Result cancelOrder(Long orderId);
+
+    /**
+     * 管理员端全平台订单列表（只读监督）：仅管理员 token（role=2）可调，越权拒绝；
+     * 全量订单 create_time 倒序，联查商家名/服务名/下单家属昵称/老人信息/地址拼装 VO，前端做状态筛选与关键词过滤
+     */
+    Result listAdminOrders();
 }

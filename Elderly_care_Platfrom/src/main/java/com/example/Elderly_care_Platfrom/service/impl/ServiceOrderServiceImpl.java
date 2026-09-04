@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.Elderly_care_Platfrom.dao.AdminOrderVO;
 import com.example.Elderly_care_Platfrom.dao.MerchantOrderVO;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.dao.UserOrderVO;
@@ -348,5 +349,71 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
             return Result.fail("操作失败，请稍后重试");
         }
         return Result.ok(status == 1 ? "已接单" : "服务已完成");
+    }
+
+    @Override
+    public Result listAdminOrders() {
+        // 越权守卫：仅管理员(role=2)可看全平台订单，家属/商家 token 一律拒绝（防止拉走全平台订单=数据泄露）
+        if (UserContext.get() == null || !"2".equals(UserContext.get().role())) {
+            return Result.fail("无权限");
+        }
+        List<ServiceOrder> orders = list(new QueryWrapper<ServiceOrder>().orderByDesc("create_time"));
+        List<AdminOrderVO> result = new ArrayList<>(orders.size());
+        if (orders.isEmpty()) {
+            return Result.ok(result, 0L);
+        }
+
+        // 关联字段一次批量查出（防 N+1）
+        Set<Long> userIds = new HashSet<>();
+        Set<Long> providerIds = new HashSet<>();
+        Set<Long> itemIds = new HashSet<>();
+        Set<Long> elderIds = new HashSet<>();
+        Set<Long> addressIds = new HashSet<>();
+        for (ServiceOrder o : orders) {
+            if (o.getUserId() != null) userIds.add(o.getUserId());
+            if (o.getProviderId() != null) providerIds.add(o.getProviderId());
+            if (o.getItemId() != null) itemIds.add(o.getItemId());
+            if (o.getElderId() != null) elderIds.add(o.getElderId());
+            if (o.getAddressId() != null) addressIds.add(o.getAddressId());
+        }
+        Map<Long, SysUser> userMap = toMap(sysUserMapper.selectBatchIds(userIds), SysUser::getId);
+        Map<Long, ServiceProvider> providerMap = toMap(serviceProviderMapper.selectBatchIds(providerIds), ServiceProvider::getProviderId);
+        Map<Long, ServiceItem> itemMap = toMap(serviceItemMapper.selectBatchIds(itemIds), ServiceItem::getItemId);
+        Map<Long, ElderProfile> elderMap = toMap(elderProfileMapper.selectBatchIds(elderIds), ElderProfile::getElderId);
+        Map<Long, UserAddress> addressMap = toMap(userAddressMapper.selectBatchIds(addressIds), UserAddress::getAddrId);
+
+        for (ServiceOrder o : orders) {
+            SysUser user = o.getUserId() == null ? null : userMap.get(o.getUserId());
+            ServiceProvider provider = o.getProviderId() == null ? null : providerMap.get(o.getProviderId());
+            ServiceItem item = o.getItemId() == null ? null : itemMap.get(o.getItemId());
+            ElderProfile elder = o.getElderId() == null ? null : elderMap.get(o.getElderId());
+            UserAddress addr = o.getAddressId() == null ? null : addressMap.get(o.getAddressId());
+
+            AdminOrderVO vo = new AdminOrderVO();
+            vo.setOrderId(o.getOrderId());
+            vo.setOrderNo(o.getOrderNo());
+            vo.setOrderStatus(o.getOrderStatus() == null ? 0 : o.getOrderStatus().intValue());
+            vo.setQuantity(o.getQuantity());
+            vo.setUnitPrice(o.getUnitPrice());
+            vo.setTotalPrice(o.getTotalPrice());
+            vo.setServiceTime(o.getServiceTime());
+            vo.setCreateTime(o.getCreateTime());
+            vo.setContactPhone(o.getContactPhone());
+            vo.setRemark(o.getRemark());
+            vo.setProviderId(provider == null ? null : provider.getProviderId());
+            vo.setProviderName(provider == null ? null : provider.getProviderName());
+            vo.setItemId(item == null ? null : item.getItemId());
+            vo.setItemName(item == null ? null : item.getItemName());
+            vo.setFamilyName(user == null ? null : user.getUserName());
+            vo.setElderId(elder == null ? null : elder.getElderId());
+            vo.setElderName(elder == null ? null : elder.getElderName());
+            vo.setGender(elder == null || elder.getGender() == null ? null : elder.getGender().intValue());
+            vo.setBirthDate(elder == null ? null : elder.getBirthDate());
+            vo.setElderPhone(elder == null ? null : elder.getPhone());
+            vo.setHealthNote(elder == null ? null : elder.getHealthNote());
+            vo.setAddressText(addressText(addr));
+            result.add(vo);
+        }
+        return Result.ok(result, (long) result.size());
     }
 }
