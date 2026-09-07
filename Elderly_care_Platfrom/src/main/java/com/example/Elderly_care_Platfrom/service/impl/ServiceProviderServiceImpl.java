@@ -3,7 +3,6 @@ package com.example.Elderly_care_Platfrom.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceProvider;
-import com.example.Elderly_care_Platfrom.mapper.ServiceCategoryMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceProviderMapper;
 import com.example.Elderly_care_Platfrom.service.IServiceProviderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -21,9 +20,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ServiceProviderServiceImpl extends ServiceImpl<ServiceProviderMapper, ServiceProvider> implements IServiceProviderService {
-
-    @Resource
-    private ServiceCategoryMapper serviceCategoryMapper;
 
     @Override
     public Result listProviders(Integer status) {
@@ -91,20 +87,14 @@ public class ServiceProviderServiceImpl extends ServiceImpl<ServiceProviderMappe
         if (provider == null) {
             return Result.fail("商家不存在");
         }
-        //白名单复制：仅信任名称/主营分类/负责人/简介/详细地址五字段，请求体其他字段(role/status/password/phone/providerId 等)一律忽略
+        //白名单复制：仅信任名称/负责人/简介/详细地址四字段，请求体其他字段(role/status/password/phone/providerId/categoryId 等)一律忽略
+        //主营分类与登录手机号同口径：入驻归属信息不可自助修改（分类决定商家归类归属，如需调整联系平台）
         String providerName = request.getProviderName() == null ? null : request.getProviderName().trim();
         if (providerName == null || providerName.isEmpty()) {
             return Result.fail("商家名称不能为空");
         }
         if (providerName.length() > 30) {
             return Result.fail("商家名称过长（最多30字）");
-        }
-        if (request.getCategoryId() == null) {
-            return Result.fail("请选择主营服务分类");
-        }
-        //主营分类必须真实存在（同商家入驻校验）
-        if (serviceCategoryMapper.selectById(request.getCategoryId()) == null) {
-            return Result.fail("主营服务分类不存在");
         }
         //长字段：trim、空串归一 null、限长
         String legalPerson = trimToNull(request.getLegalPerson());
@@ -120,7 +110,6 @@ public class ServiceProviderServiceImpl extends ServiceImpl<ServiceProviderMappe
             return Result.fail("详细地址过长（最多100字）");
         }
         provider.setProviderName(providerName);
-        provider.setCategoryId(request.getCategoryId());
         provider.setLegalPerson(legalPerson);
         provider.setIntro(intro);
         provider.setAddress(address);

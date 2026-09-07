@@ -55,7 +55,7 @@ public class ServiceProviderController {
         return serviceProviderService.getSelfProfile();
     }
 
-    /** 商家端：修改本人店铺资料（白名单字段；phone/status/role/password 等一律忽略，不改登录账号） */
+    /** 商家端：修改本人店铺资料（白名单字段：名称/负责人/简介/详细地址；主营分类与 phone 为入驻归属信息只读不可改，providerId/role/status/password 等一律忽略） */
     @RequireRole(RoleType.PROVIDER)
     @PutMapping("/self")
     public Result updateSelf(@RequestBody ServiceProvider serviceProvider) {

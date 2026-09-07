@@ -26,6 +26,6 @@ public interface IServiceProviderService extends IService<ServiceProvider> {
     /** 商家端：查询本人店铺资料（token userId 即 provider_id；密码不返回） */
     Result getSelfProfile();
 
-    /** 商家端：修改本人店铺资料（白名单：名称/主营分类/负责人/简介/详细地址；phone/status/role 等一律忽略） */
+    /** 商家端：修改本人店铺资料（白名单：名称/负责人/简介/详细地址；主营分类/phone/status/role/providerId 等一律忽略） */
     Result updateSelfProfile(ServiceProvider request);
 }

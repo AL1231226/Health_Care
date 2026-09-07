@@ -36,7 +36,7 @@ export const getSelfProvider = () => {
   return request.get('/service-provider/self')
 }
 
-// 修改本人店铺资料（商家端）：PUT /service-provider/self，白名单字段（名称/分类/负责人/简介/地址），phone/status 不可改
+// 修改本人店铺资料（商家端）：PUT /service-provider/self，白名单字段（名称/负责人/简介/地址），主营分类与 phone 为入驻归属信息只读不可改
 export const updateSelfProvider = (data) => {
   return request.put('/service-provider/self', data)
 }

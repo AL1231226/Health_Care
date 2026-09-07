@@ -1,7 +1,7 @@
 # 项目实时进度文档（颐养平台 · 居家养老服务预约）
 
 > 本文档随开发持续更新,新会话先读它 + `CLAUDE.md` + `CHANGELOG.md`,即可接手。
-> 最后更新:2026-09-07(商家店铺资料编辑落地:GET/PUT /service-provider/self 自助查改,方法级 PROVIDER 覆盖类级 ADMIN;前轮角色权限统一校验)
+> 最后更新:2026-09-07(商家店铺资料编辑落地;修订:主营分类同 phone 只读不可改,白名单收窄为名称/负责人/简介/地址)
 
 ## 一、项目全貌
 
@@ -38,7 +38,7 @@
 ### 商家端(✅ 服务 + 订单 双 Tab 工作台 `MerchantHome.vue`)
 - **服务项目 Tab**:增删改查/上下架/统计卡,接 `/service-item/*`
 - **订单管理 Tab(2026-09-02 落地)**:状态筛选(角标)+ 表格 + **详情抽屉(服务老人健康备注必看)** + 接单(0→1)/完成服务(1→2),接 `/service-order/merchant/list`、`/service-order/status/{id}`
-- **店铺资料编辑(2026-09-07 落地)**:店铺信息卡「编辑资料」接真,弹窗查改本人店铺资料——`GET/PUT /service-provider/self`(**方法级 @RequireRole(PROVIDER) 覆盖类级 ADMIN**,admin/family 打 /self 拒「无权限」,类级三管理员端点不受影响);白名单五字段(名称/主营分类/负责人/简介/详细地址),**phone 只读不可改**(登录账号);保存成功整对象同步店铺卡 + localStorage user_info,无需重登;店铺状态/待审核提示已处理
+- **店铺资料编辑(2026-09-07 落地,主营分类即日修订为只读)**:店铺信息卡「编辑资料」接真,弹窗查改本人店铺资料——`GET/PUT /service-provider/self`(**方法级 @RequireRole(PROVIDER) 覆盖类级 ADMIN**,admin/family 打 /self 拒「无权限」,类级三管理员端点不受影响);白名单四字段(名称/负责人/简介/详细地址),**主营分类与 phone 同属入驻归属信息只读不可改**(后端不接收 categoryId,篡改不落库,弹窗分类 select disabled + 提示);保存成功整对象同步店铺卡 + localStorage user_info,无需重登;店铺状态/待审核提示已处理
 
 ### 管理员端 `AdminHome.vue`
 - ✅ 用户管理(家属禁启)、商家审核(通过/驳回)、商家管理(启停)、待办看板(实时)、**订单管理(2026-09-04 落地:全平台只读监督)**、**角色权限统一校验(2026-09-07 落地:@RequireRole + RoleInterceptor,本组三接口全部类级 ADMIN 标注)**

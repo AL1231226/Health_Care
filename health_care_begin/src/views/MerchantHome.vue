@@ -205,7 +205,7 @@ const profileFormRef = ref()
 const profileForm = reactive({
   providerId: null,
   providerName: '',
-  categoryId: null,
+  categoryId: null, // 入驻归属信息（同 phone），仅只读展示不可改，不随保存提交
   legalPerson: '',
   intro: '',
   phone: '', // 登录账号，仅只读展示不可改
@@ -213,7 +213,6 @@ const profileForm = reactive({
 })
 const profileRules = {
   providerName: [{ required: true, message: '请输入商家名称', trigger: 'blur' }],
-  categoryId: [{ required: true, message: '请选择主营分类', trigger: 'change' }],
 }
 const openProfileEdit = async () => {
   // 弹窗前拉最新店铺资料填表单（不依赖登录时的本地快照，失败提示后不打开）
@@ -240,10 +239,9 @@ const saveProfile = async () => {
   if (!valid) return
   profileSaving.value = true
   try {
-    // 只提交可编辑字段（后端另有白名单兜底，phone/status 等改了也无效）
+    // 只提交可编辑字段（后端另有白名单兜底：主营分类/phone/status/role/providerId 等改了也无效）
     const res = await updateSelfProvider({
       providerName: profileForm.providerName,
-      categoryId: profileForm.categoryId,
       legalPerson: profileForm.legalPerson,
       intro: profileForm.intro,
       address: profileForm.address,
@@ -613,16 +611,17 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <!-- ======== 编辑店铺资料弹窗（白名单字段；联系电话为登录账号只读不可改） ======== -->
+    <!-- ======== 编辑店铺资料弹窗（白名单：名称/负责人/简介/地址；主营分类与联系电话为入驻归属信息只读不可改） ======== -->
     <el-dialog v-model="profileDialogVisible" title="编辑店铺资料" width="520px" :close-on-click-modal="false">
       <el-form ref="profileFormRef" :model="profileForm" :rules="profileRules" label-width="90px">
         <el-form-item label="商家名称" prop="providerName">
           <el-input v-model="profileForm.providerName" placeholder="如：城志社区食堂" maxlength="30" />
         </el-form-item>
         <el-form-item label="主营分类" prop="categoryId">
-          <el-select v-model="profileForm.categoryId" placeholder="请选择主营分类" style="width: 100%">
+          <el-select v-model="profileForm.categoryId" disabled style="width: 100%">
             <el-option v-for="c in categories" :key="c.categoryId" :label="c.categoryName" :value="c.categoryId" />
           </el-select>
+          <span class="muted-text" style="margin-left: 8px; font-size: 12px">入驻分类，暂不可修改</span>
         </el-form-item>
         <el-form-item label="负责人" prop="legalPerson">
           <el-input v-model="profileForm.legalPerson" placeholder="负责人姓名（选填）" maxlength="30" />
