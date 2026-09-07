@@ -1,8 +1,10 @@
 package com.example.Elderly_care_Platfrom.controller;
 
+import com.example.Elderly_care_Platfrom.annotation.RequireRole;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceOrder;
 import com.example.Elderly_care_Platfrom.service.IServiceOrderService;
+import com.example.Elderly_care_Platfrom.utils.RoleType;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,36 +31,42 @@ public class ServiceOrderController {
     private IServiceOrderService serviceOrderService;
 
     /** 用户端：提交订单（归属取 token 家属；商家/价格由服务端从服务项目快照，状态固定待接单） */
+    @RequireRole(RoleType.USER)
     @PostMapping("/create")
     public Result create(@RequestBody ServiceOrder serviceOrder) {
         return serviceOrderService.createOrder(serviceOrder);
     }
 
     /** 商家端：本店订单列表（归属取 token 商家），status 可选 0待接单 1服务中 2已完成 3已取消 */
+    @RequireRole(RoleType.PROVIDER)
     @GetMapping("/merchant/list")
     public Result merchantList(@RequestParam(required = false) Integer status) {
         return serviceOrderService.listMerchantOrders(status);
     }
 
     /** 用户端：本人订单列表（归属取 token 家属），status 可选 0待接单 1服务中 2已完成 3已取消 */
+    @RequireRole(RoleType.USER)
     @GetMapping("/user/list")
     public Result userList(@RequestParam(required = false) Integer status) {
         return serviceOrderService.listUserOrders(status);
     }
 
     /** 用户端：取消本人待接单订单(0→3，仅限本人订单) */
+    @RequireRole(RoleType.USER)
     @PutMapping("/cancel/{orderId}")
     public Result cancel(@PathVariable Long orderId) {
         return serviceOrderService.cancelOrder(orderId);
     }
 
     /** 商家端：接单(0→1) / 完成服务(1→2)，仅限本店订单 */
+    @RequireRole(RoleType.PROVIDER)
     @PutMapping("/status/{orderId}")
     public Result updateStatus(@PathVariable Long orderId, @RequestParam Integer status) {
         return serviceOrderService.updateOrderStatus(orderId, status);
     }
 
-    /** 管理员端：全平台订单列表（只读监督，仅管理员 role=2 可调，其余角色「无权限」） */
+    /** 管理员端：全平台订单列表（只读监督；越权由 RoleInterceptor 统一拦截，仅管理员可达） */
+    @RequireRole(RoleType.ADMIN)
     @GetMapping("/admin/list")
     public Result adminList() {
         return serviceOrderService.listAdminOrders();

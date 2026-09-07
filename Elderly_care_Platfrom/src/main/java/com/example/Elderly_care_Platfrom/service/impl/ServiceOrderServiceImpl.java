@@ -353,10 +353,7 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
 
     @Override
     public Result listAdminOrders() {
-        // 越权守卫：仅管理员(role=2)可看全平台订单，家属/商家 token 一律拒绝（防止拉走全平台订单=数据泄露）
-        if (UserContext.get() == null || !"2".equals(UserContext.get().role())) {
-            return Result.fail("无权限");
-        }
+        // 仅管理员可达已由 RoleInterceptor 统一拦截（@RequireRole(ADMIN)），此处无需重复守卫
         List<ServiceOrder> orders = list(new QueryWrapper<ServiceOrder>().orderByDesc("create_time"));
         List<AdminOrderVO> result = new ArrayList<>(orders.size());
         if (orders.isEmpty()) {

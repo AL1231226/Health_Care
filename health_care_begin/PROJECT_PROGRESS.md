@@ -1,7 +1,7 @@
 # 项目实时进度文档（颐养平台 · 居家养老服务预约）
 
 > 本文档随开发持续更新,新会话先读它 + `CLAUDE.md` + `CHANGELOG.md`,即可接手。
-> 最后更新:2026-09-04(管理员订单管理落地:全平台只读监督 + 看板「待接单新订单」联动)
+> 最后更新:2026-09-07(角色权限统一校验落地:@RequireRole 注解 + RoleInterceptor 统一强制,堵管理员接口裸奔口)
 
 ## 一、项目全貌
 
@@ -11,7 +11,7 @@
 | 后端 | `Elderly_care_Platfrom`(同级目录) | Spring Boot + MyBatis-Plus + MySQL,包 `com.example.Elderly_care_Platfrom` |
 | 数据库 | `health_data`(root/123456,客户端 `/d/MySQL/server/bin/mysql`) | 10 张表齐:admin / sys_user / elder_profile / user_address / service_category / service_provider / service_item / service_order / service_comment / service_cart |
 
-后端约定:统一返回 `dao/Result`(`{success,errorMsg,data,total}`,HTTP 恒 200);JWT 拦截在 `config/WebMvcConfig`(公开:`/auth/**`、`/service-category/**`;其余业务接口需登录,含 `/service-order/**`、`/service-cart/**`);Controller 薄壳 + Service 接口/Impl(QueryWrapper);分页未启用(列表全量返回);建表脚本统一存 `Elderly_care_Platfrom/src/main/resources/sql/`。**所有改动必须同步记入 `CHANGELOG.md`**(前端目录,按日期节,新节置顶)。
+后端约定:统一返回 `dao/Result`(`{success,errorMsg,data,total}`,HTTP 恒 200);JWT 拦截在 `config/WebMvcConfig`(公开:`/auth/**`、`/service-category/**`;其余业务接口需登录,含 `/service-order/**`、`/service-cart/**`);Controller 薄壳 + Service 接口/Impl(QueryWrapper);分页未启用(列表全量返回);建表脚本统一存 `Elderly_care_Platfrom/src/main/resources/sql/`。**角色权限统一校验(2026-09-07 起):** Controller 类/方法上标 `@RequireRole(RoleType.USER/ADMIN/PROVIDER)`,`config/RoleInterceptor`(注册在 AuthInterceptor 后)统一执行,新增业务接口只需标注解即受保护,**不要再手写 role 守卫**;登录门禁(IAuthServiceImpl 验请求体 role)与归属/范围校验(看本人/本店数据隔离)仍各司其职。**所有改动必须同步记入 `CHANGELOG.md`**(前端目录,按日期节,新节置顶)。
 
 ## 二、三角色 × 模块 完成地图
 
@@ -19,7 +19,7 @@
 
 ### 登录与账号(✅)
 - 家属登录/注册、商家登录/入驻(审核通过前不可登录)、管理员登录;三角色各自 `/auth/*` 接口
-- 已定决策:密码**明文存储**(用户决定,登录返回前后端统一置空密码字段);角色权限统一校验(如 admin 接口 checkAdmin)**暂未做,后续统一处理**
+- 已定决策:密码**明文存储**(用户决定,登录返回前后端统一置空密码字段);**角色权限统一校验已落地(2026-09-07)**:`@RequireRole` 注解 + `RoleInterceptor` 在登录后统一强制三角色归属,管理员系接口(`/sys-user/**`、`/service-provider/**`)原「仅登录即可调」的裸奔口已堵;前端路由守卫(router 无 beforeEach)仍留候选
 - 登录信息存 localStorage:`token` + `user_info`(剔除 password;家属含 id/phone/userName)
 
 ### 家属端(用户端)
@@ -41,7 +41,7 @@
 - 店铺资料编辑:按钮禁用占位 ⏳;店铺状态/待审核提示已处理
 
 ### 管理员端 `AdminHome.vue`
-- ✅ 用户管理(家属禁启)、商家审核(通过/驳回)、商家管理(启停)、待办看板(实时)、**订单管理(2026-09-04 落地:全平台只读监督)**
+- ✅ 用户管理(家属禁启)、商家审核(通过/驳回)、商家管理(启停)、待办看板(实时)、**订单管理(2026-09-04 落地:全平台只读监督)**、**角色权限统一校验(2026-09-07 落地:@RequireRole + RoleInterceptor,本组三接口全部类级 ADMIN 标注)**
 - 订单管理只读监督: `GET /service-order/admin/list`(role=2 守卫,家属/商家越权「无权限」),状态筛选胶囊带角标 + 关键词搜索(商家/服务/老人/家属/订单号)+ 富表格 + 详情抽屉(含下单家属昵称/老人健康备注,纯查看);数据看板待办区「待接单新订单 N」卡联动(查看全部 → 订单管理自动选待接单),订单数据一次加载看板/订单页共享
 - 🧩 数据看板统计卡部分静态;⏳ 服务管理、分类管理、评价管理(删除)、系统设置
 
@@ -61,12 +61,13 @@
 
 **健康信息决策**:老人健康备注(**实时联查**,不做快照,家属更新商家即时可见);仅该单商家订单详情可见;老人档案删除后订单详情提示「档案已删」。
 
-**管理员只读监督(2026-09-04)**:`GET /service-order/admin/list` 全平台订单(role=2 守卫,家属/商家越权「无权限」,防全平台数据泄露),联 sys_user 取下单家属昵称,AdminHome「订单管理」状态筛选/关键词搜索/详情抽屉(含老人健康备注,协调投诉参考),纯查看无写操作;数据看板待办区待接单卡联动;订单写操作(强制取消等)留待仲裁需求单独立项。
+**管理员只读监督(2026-09-04)**:`GET /service-order/admin/list` 全平台订单(仅管理员可达,2026-09-07 起由 Controller 层 `@RequireRole(ADMIN)` + RoleInterceptor 统一强制,原接口内 role 守卫已删除,防全平台数据泄露),联 sys_user 取下单家属昵称,AdminHome「订单管理」状态筛选/关键词搜索/详情抽屉(含老人健康备注,协调投诉参考),纯查看无写操作;数据看板待办区待接单卡联动;订单写操作(强制取消等)留待仲裁需求单独立项。
 
 ## 四、下一轮候选(按惯例的小步推进,一次一个)
 
-1. 角色权限统一校验(三角色接口 checkAdmin 专项);商家店铺资料编辑(禁用按钮占位)
+1. 商家店铺资料编辑(MerchantHome 禁用按钮占位);前端路由守卫(router 无 beforeEach,本轮统一角色校验落地后建议补,防手输 URL 直达他端页面)
 2. 可选延伸(评价相关,不急):商家端查看「我的评价」列表、管理员评价删除(AdminHome 预留)、商家端统计卡「平均分」口径修正(现按从未维护的 item.score 算而空置,应改按商家评价平均或移除)
+3. 已定但未做:登录后管理员中途停用商家店铺的窗口期兜底(登录已拒 0/2 状态,token 有效期内被停用仍可用,30min 过期自然失效)
 
 ## 五、环境速查
 

@@ -1,9 +1,11 @@
 package com.example.Elderly_care_Platfrom.controller;
 
+import com.example.Elderly_care_Platfrom.annotation.RequireRole;
 import com.example.Elderly_care_Platfrom.dao.CheckoutRequest;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceCart;
 import com.example.Elderly_care_Platfrom.service.IServiceCartService;
+import com.example.Elderly_care_Platfrom.utils.RoleType;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/service-cart")
+@RequireRole(RoleType.USER)
 public class ServiceCartController {
 
     @Resource

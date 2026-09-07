@@ -50,7 +50,7 @@ public interface IServiceOrderService extends IService<ServiceOrder> {
     Result cancelOrder(Long orderId);
 
     /**
-     * 管理员端全平台订单列表（只读监督）：仅管理员 token（role=2）可调，越权拒绝；
+     * 管理员端全平台订单列表（只读监督）：仅管理员可达（Controller 层 @RequireRole(ADMIN) 由 RoleInterceptor 统一强制，越权返「无权限」）；
      * 全量订单 create_time 倒序，联查商家名/服务名/下单家属昵称/老人信息/地址拼装 VO，前端做状态筛选与关键词过滤
      */
     Result listAdminOrders();

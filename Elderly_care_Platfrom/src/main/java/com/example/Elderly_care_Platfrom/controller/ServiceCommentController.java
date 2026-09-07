@@ -1,8 +1,10 @@
 package com.example.Elderly_care_Platfrom.controller;
 
+import com.example.Elderly_care_Platfrom.annotation.RequireRole;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceComment;
 import com.example.Elderly_care_Platfrom.service.IServiceCommentService;
+import com.example.Elderly_care_Platfrom.utils.RoleType;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/service-comment")
+@RequireRole(RoleType.USER)
 public class ServiceCommentController {
 
     @Resource

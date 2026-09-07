@@ -1,8 +1,10 @@
 package com.example.Elderly_care_Platfrom.controller;
 
+import com.example.Elderly_care_Platfrom.annotation.RequireRole;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceItem;
 import com.example.Elderly_care_Platfrom.service.IServiceItemService;
+import com.example.Elderly_care_Platfrom.utils.RoleType;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/service-item")
+@RequireRole(RoleType.PROVIDER)
 public class ServiceItemController {
     @Resource
     private IServiceItemService serviceItemService;
