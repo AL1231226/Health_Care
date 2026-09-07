@@ -25,3 +25,7 @@ export const cancelOrder = (orderId) => request.put(`/service-order/cancel/${ord
 
 // 管理员端：全平台订单列表（只读监督）GET /service-order/admin/list，仅管理员 role=2 可调，越权「无权限」
 export const listAdminOrders = () => request.get('/service-order/admin/list')
+
+// 管理员端：下单趋势统计（数据看板轮询）GET /service-order/admin/trend?range=7|30，
+// range 仅影响 days(近 range 天逐日)；hours 固定统计今日 0-23（零日/零时已补）
+export const listAdminTrend = (range) => request.get('/service-order/admin/trend', { params: { range } })

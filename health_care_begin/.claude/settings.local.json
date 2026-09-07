@@ -21,7 +21,11 @@
       "Bash(mysql -uroot -p123456 health_data -e \"SHOW CREATE TABLE elder_profile\\\\G\")",
       "Bash(mysql -uroot -p123456 health_data -e \"SHOW CREATE TABLE user_address\\\\G\")",
       "Bash(mvn -q compile -DskipTests)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(/d/MySQL/server/bin/mysql -uroot -p123456 --default-character-set=utf8mb4 health_data -e \"INSERT INTO service_item \\(provider_id, category_id, item_name, price, unit, duration, detail, sort, status\\) VALUES \\(2, 2, '卫生间除垢消毒', 90.00, '次', '约1.5小时', '马桶浴缸水垢清理、瓷砖除霉、整体消毒', 1, 1\\); SELECT i.item_id, p.provider_name, i.item_name, i.status FROM service_item i JOIN service_provider p ON p.provider_id = i.provider_id WHERE i.provider_id = 2;\")",
+      "Bash(/d/MySQL/server/bin/mysql -uroot -p123456 --default-character-set=utf8mb4 health_data -e \"SELECT COUNT\\(*\\) AS 商家总数, SUM\\(服务数 >= 2\\) AS 达标商家, COUNT\\(DISTINCT category_id\\) AS 覆盖分类 FROM \\(SELECT p.provider_id, p.category_id, COUNT\\(i.item_id\\) AS 服务数 FROM service_provider p LEFT JOIN service_item i ON i.provider_id = p.provider_id GROUP BY p.provider_id\\) t; SELECT COUNT\\(*\\) AS 服务总数 FROM service_item;\")",
+      "Bash(/d/MySQL/server/bin/mysql -uroot -p123456 --default-character-set=utf8mb4 health_data -e \"SELECT provider_id, provider_name, phone, password FROM service_provider ORDER BY provider_id;\")",
+      "Bash(/d/MySQL/server/bin/mysql --default-character-set=utf8mb4 -uroot -p123456 health_data -e ' *)"
     ]
   }
 }

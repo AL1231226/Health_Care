@@ -39,7 +39,6 @@ public class IAuthServiceImpl implements IAuthService {
         if(!"1".equals(loginRequest.getRole())){
             return Result.fail("角色错误");
         }
-
         // 校验格式
         Result validateResult = validate(loginRequest);
         if(!validateResult.getSuccess()){

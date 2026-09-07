@@ -55,9 +55,9 @@ onMounted(() => {
   loadProviders()
 })
 
-// 点商家卡片进商家详情页；预约下单仍占位
+// 点商家卡片进商家详情页；服务行主体点进服务详情页（看介绍与该服务评价）
 const onMerchantClick = (p) => router.push(`/user/merchant/${p.providerId}`)
-const onItemClick = () => ElMessage.info('预约下单建设中，敬请期待')
+const goItem = (item) => router.push(`/user/item/${item.itemId}`)
 
 // 无 logo 时按商家名取首字 + 固定渐变头像
 const avatarGradients = [
@@ -115,7 +115,7 @@ const avatarStyle = (name) => {
 
         <!-- 该分类下上架的服务项目 -->
         <div class="item-list">
-          <div v-for="item in p.items" :key="item.itemId" class="item-row" @click.stop="onItemClick">
+          <div v-for="item in p.items" :key="item.itemId" class="item-row" @click.stop="goItem(item)">
             <div class="item-info">
               <span class="item-name">{{ item.itemName }}</span>
               <span class="item-tags">
@@ -264,6 +264,7 @@ const avatarStyle = (name) => {
   gap: 12px;
   padding: 10px 8px;
   border-radius: 10px;
+  cursor: pointer;
   transition: background 0.2s;
 }
 .item-row:hover {

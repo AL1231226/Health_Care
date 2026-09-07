@@ -7,8 +7,13 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Food, Brush, Umbrella, FirstAidKit, Sunrise, Clock } from '@element-plus/icons-vue'
 import { listCategory } from '@/api/category.js'
+import { listHot } from '@/api/provider.js'
+import AiChat from '@/components/AiChat.vue'
 
 const router = useRouter()
+
+// 小精灵点击开/关 AI 聊天浮窗（组件每次挂载重置会话，关闭即清）
+const chatOpen = ref(false)
 
 /* ---------- AI 助手小精灵（先展示，AI 对话后续接入） ---------- */
 const aiTips = ['你好呀，我是小颐 👋', '需要帮你预约服务吗？', '点击我可以和我聊天哦～']
@@ -54,13 +59,13 @@ const onSpriteUp = () => {
   spriteRef.value?.classList.remove('dragging')
 }
 
-// 拖动结束后浏览器还会补发 click，这里拦截，只有「没拖过」才算真点击
+// 拖动结束后浏览器还会补发 click，这里拦截，只有「没拖过」才算真点击（点开/收起 AI 聊天窗）
 const onSpriteClick = () => {
   if (dragState.moved) {
     dragState.moved = false
     return
   }
-  todo('AI 助手对话')
+  chatOpen.value = !chatOpen.value
 }
 const aiTip = ref(aiTips[0])
 let aiTipTimer = null
@@ -71,6 +76,7 @@ onMounted(() => {
     aiTip.value = aiTips[aiTipIndex]
   }, 4000)
   loadCategories()
+  loadHot()
 })
 onUnmounted(() => clearInterval(aiTipTimer))
 
@@ -133,24 +139,59 @@ const loadCategories = async () => {
   }
 }
 
-// 热门推荐：Tab 切换「服务 / 商家」
+// 热门推荐：Tab 切换「服务 / 商家」，接真 GET /service-category/hot（销量 Top8 服务 + Top4 商家）
 const hotTab = ref('service')
+const hotLoading = ref(false)
+const hotItems = ref([]) // 服务卡：itemName/price/unit/duration/detail/score/sales/providerName
+const hotProviders = ref([]) // 商家卡：providerName/logo/intro/categoryName/score/reviewCount/totalSales/district
 
-// TODO: 替换为后端 GET /service/item/hot（当前静态假数据）
-const hotServices = [
-  { name: '上门助餐', icon: Food, bg: '#fff1e8', color: '#ff8a4c', desc: '营养师定制午/晚餐，三菜一汤', price: 35, unit: '/次', duration: '60分钟', sales: 1286, score: 4.9 },
-  { name: '全屋日常保洁', icon: Brush, bg: '#e8f4ff', color: '#4c9fff', desc: '客厅卧室厨卫全方位清洁', price: 120, unit: '/2小时', duration: '120分钟', sales: 864, score: 4.8 },
-  { name: '专业助浴服务', icon: Umbrella, bg: '#e8fff4', color: '#34c98e', desc: '便携助浴设备，恒温安全', price: 98, unit: '/次', duration: '90分钟', sales: 623, score: 4.9 },
-  { name: '陪诊就医', icon: FirstAidKit, bg: '#fdeaea', color: '#f56c6c', desc: '挂号取药缴费全程陪同', price: 80, unit: '/次', duration: '半天', sales: 437, score: 4.7 },
-]
+const loadHot = async () => {
+  hotLoading.value = true
+  try {
+    const result = await listHot()
+    if (result.success) {
+      hotItems.value = result.data?.items || []
+      hotProviders.value = result.data?.providers || []
+    } else {
+      ElMessage.error(result.errorMsg || '获取热门推荐失败')
+    }
+  } catch (err) {
+    // 接口异常：保持空列表，区块空态兜底，不阻塞首页
+  } finally {
+    hotLoading.value = false
+  }
+}
 
-// TODO: 替换为后端 GET /provider/recommend（当前静态假数据，字段对齐 service_provider 表）
-const merchants = [
-  { name: '幸福助餐中心', category: '助餐', area: '天河区', orders: 1286, score: 4.9, color: '#ff8a4c' },
-  { name: '洁丽家政', category: '助洁', area: '越秀区', orders: 864, score: 4.8, color: '#4c9fff' },
-  { name: '阳光助浴坊', category: '助浴', area: '海珠区', orders: 623, score: 4.9, color: '#34c98e' },
-  { name: '康乐康复中心', category: '康复', area: '白云区', orders: 437, score: 4.7, color: '#9b6cf5' },
+// 商家头像/服务首字圆底色：按名称哈希取固定渐变，同名永远同色（与商家列表页口径一致）
+const avatarColors = [
+  'linear-gradient(135deg, #ffa05f, #ff7a45)',
+  'linear-gradient(135deg, #4cc0ff, #2f86f6)',
+  'linear-gradient(135deg, #4fd6a3, #23b978)',
+  'linear-gradient(135deg, #a68cff, #7d5cf6)',
+  'linear-gradient(135deg, #ff8fb0, #f6588a)',
 ]
+const avatarStyle = (name) => {
+  let h = 0
+  for (const ch of name || '') h = (h * 31 + ch.charCodeAt(0)) % 997
+  return { background: avatarColors[h % avatarColors.length] }
+}
+
+// 服务卡主体 → 服务详情页（看服务介绍与该服务评价）；「立即预约」按钮仍直接下单
+const goService = (s) => router.push(`/user/item/${s.itemId}`)
+
+// 服务卡 → 下单确认页（带齐 itemId/名称/价格/单位/时长/商家名，OrderConfirm 直读 query 不再拉接口）
+const goOrder = (s) => {
+  router.push({
+    path: '/user/order',
+    query: {
+      itemId: s.itemId, itemName: s.itemName, price: s.price,
+      unit: s.unit, duration: s.duration || '', providerName: s.providerName || '',
+    },
+  })
+}
+
+// 商家卡 → 商家详情页
+const goMerchant = (m) => router.push(`/user/merchant/${m.providerId}`)
 
 // 分类卡片 → 商家列表页（带分类 id 与名称，商家列表页按 id 拉取该分类下商家）
 const goMerchants = (c) => {
@@ -204,47 +245,62 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
             <span class="hot-tab" :class="{ active: hotTab === 'merchant' }" @click="hotTab = 'merchant'">商家</span>
           </div>
         </div>
-        <div v-show="hotTab === 'service'" class="service-grid">
-          <div v-for="s in hotServices" :key="s.name" class="service-card">
-            <div class="service-head">
-              <span class="service-icon" :style="{ background: s.bg, color: s.color }">
-                <el-icon :size="22"><component :is="s.icon" /></el-icon>
-              </span>
-              <div class="service-title">
-                <h4>{{ s.name }}</h4>
-                <span class="score">★ {{ s.score }}</span>
+        <div v-show="hotTab === 'service'" v-loading="hotLoading">
+          <div v-if="hotItems.length" class="service-grid">
+            <div v-for="(s, idx) in hotItems" :key="s.itemId" class="service-card" @click="goService(s)">
+              <span class="rank-badge" :class="idx < 3 ? 'is-top' : ''">TOP{{ idx + 1 }}</span>
+              <div class="service-head">
+                <span class="service-icon" :style="avatarStyle(s.itemName)">{{ (s.itemName || '服').slice(0, 1) }}</span>
+                <div class="service-title">
+                  <h4>{{ s.itemName }}</h4>
+                  <span class="score">{{ s.score != null ? '★ ' + s.score : '暂无评分' }}</span>
+                </div>
+              </div>
+              <p class="service-desc">{{ s.detail || ((s.providerName || '本店') + ' 提供，点此查看详情与评价') }}</p>
+              <div class="service-meta">
+                <span v-if="s.duration"><el-icon><Clock /></el-icon>{{ s.duration }}</span>
+                <span>已售 {{ s.sales }}</span>
+              </div>
+              <div class="service-bottom">
+                <div class="price"><b>¥{{ s.price }}</b><i>起/{{ s.unit }}</i></div>
+                <el-button type="primary" round size="small" @click.stop="goOrder(s)">立即预约</el-button>
               </div>
             </div>
-            <p class="service-desc">{{ s.desc }}</p>
-            <div class="service-meta">
-              <span><el-icon><Clock /></el-icon>{{ s.duration }}</span>
-              <span>已售 {{ s.sales }}</span>
-            </div>
-            <div class="service-bottom">
-              <div class="price"><b>¥{{ s.price }}</b><i>起{{ s.unit }}</i></div>
-              <el-button type="primary" round size="small" @click="todo('预约下单')">立即预约</el-button>
-            </div>
           </div>
+          <el-empty v-else-if="!hotLoading" description="暂无热门服务" :image-size="90" />
         </div>
 
-        <!-- 热门商家（字段对齐 service_provider 表，归属状态等后端接入后替换） -->
-        <div v-show="hotTab === 'merchant'" class="merchant-grid">
-          <div v-for="m in merchants" :key="m.name" class="merchant-card" @click="todo('商家详情')">
-            <span class="merchant-avatar" :style="{ background: m.color }">{{ m.name.slice(0, 1) }}</span>
-            <div class="merchant-info">
-              <div class="merchant-name">
-                {{ m.name }}
-                <span class="merchant-tag">{{ m.category }}</span>
+        <!-- 热门商家：销量 Top4（按名下上架服务销量合计排序），点击进商家详情 -->
+        <div v-show="hotTab === 'merchant'" v-loading="hotLoading">
+          <div v-if="hotProviders.length" class="merchant-grid">
+            <div v-for="m in hotProviders" :key="m.providerId" class="merchant-card" @click="goMerchant(m)">
+              <img v-if="m.logo" :src="m.logo" class="merchant-avatar merchant-img" alt="" />
+              <span v-else class="merchant-avatar" :style="avatarStyle(m.providerName)">{{ (m.providerName || '商').slice(0, 1) }}</span>
+              <div class="merchant-info">
+                <div class="merchant-name">
+                  <span class="mn">{{ m.providerName }}</span>
+                  <span v-if="m.categoryName" class="merchant-tag">{{ m.categoryName }}</span>
+                </div>
+                <div class="merchant-meta">
+                  <span v-if="m.score != null" class="rate">★ {{ m.score }}</span>
+                  <span>已售 {{ m.totalSales }}</span>
+                  <span v-if="m.reviewCount">{{ m.reviewCount }} 条评价</span>
+                  <span>服务 {{ m.district || m.address || '详询店内' }}</span>
+                </div>
+                <p v-if="m.intro" class="merchant-intro">{{ m.intro }}</p>
               </div>
-              <div class="merchant-meta">★ {{ m.score }} · 已接单 {{ m.orders }} · 服务 {{ m.area }}</div>
             </div>
           </div>
+          <el-empty v-else-if="!hotLoading" description="暂无热门商家" :image-size="90" />
         </div>
       </section>
 
     </div>
 
-    <!-- ======== AI 助手小精灵（可拖动；点击进入 AI 对话待接入） ======== -->
+    <!-- ======== AI 助手聊天浮窗（小精灵点击开合） ======== -->
+    <AiChat v-if="chatOpen" @close="chatOpen = false" />
+
+    <!-- ======== AI 助手小精灵（可拖动；点击开/关 AI 聊天窗） ======== -->
     <div
       ref="spriteRef"
       class="ai-sprite"
@@ -418,6 +474,7 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
   margin-top: 20px;
 }
 .service-card {
+  position: relative;
   padding: 20px;
   background: #fff;
   border-radius: 16px;
@@ -427,6 +484,22 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
 .service-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 10px 24px rgba(249, 109, 59, 0.14);
+}
+/* 销量排行角标：前三橙金高亮，其余灰 */
+.rank-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f2efe9;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a8378;
+}
+.rank-badge.is-top {
+  background: linear-gradient(135deg, #ffa05f, #ff7a45);
+  color: #fff;
 }
 .service-head {
   display: flex;
@@ -440,12 +513,23 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
   width: 46px;
   height: 46px;
   border-radius: 13px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
   flex-shrink: 0;
+}
+.service-title {
+  min-width: 0;
+  flex: 1;
+  padding-right: 46px;
 }
 .service-title h4 {
   font-size: 16px;
   font-weight: 600;
   color: #2d2a26;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .score {
   font-size: 13px;
@@ -456,10 +540,15 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
   font-size: 13px;
   color: #a39c92;
   line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .service-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 12px;
   font-size: 12px;
@@ -543,8 +632,12 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
   font-size: 22px;
   flex-shrink: 0;
 }
+.merchant-img {
+  object-fit: cover;
+}
 .merchant-info {
   min-width: 0;
+  flex: 1;
 }
 .merchant-name {
   display: flex;
@@ -554,6 +647,13 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
   font-weight: 600;
   color: #2d2a26;
 }
+.merchant-name .mn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
 .merchant-tag {
   padding: 1px 8px;
   border-radius: 999px;
@@ -561,11 +661,27 @@ const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
   font-size: 11px;
   font-weight: 400;
   color: #ff7a45;
+  flex-shrink: 0;
 }
 .merchant-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 10px;
   margin-top: 8px;
   font-size: 12px;
   color: #a39c92;
+}
+.merchant-meta .rate {
+  color: #ff8a4c;
+}
+.merchant-intro {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #c0b9ae;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============ 响应式 ============ */

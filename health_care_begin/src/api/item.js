@@ -15,3 +15,9 @@ export const deleteItem = (id) => request.delete(`/service-item/delete/${id}`)
 export const getItem = (id) => request.get(`/service-item/get/${id}`)
 // 上下架切换：PUT /service-item/status/{id}?status=0 或 1
 export const toggleItemStatus = (id, status) => request.put(`/service-item/status/${id}`, null, { params: { status } })
+// 管理员端：全平台服务项目列表：GET /service-item/admin/list，status 可选(0下架/1上架)
+export const listAdminItems = (status) => {
+    return request.get('/service-item/admin/list', { params: status != null ? { status } : {} })
+}
+// 管理员端：任意服务上下架：PUT /service-item/admin/status/{id}?status=0 或 1
+export const toggleAdminItemStatus = (id, status) => request.put(`/service-item/admin/status/${id}`, null, { params: { status } })

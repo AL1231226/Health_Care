@@ -14,3 +14,9 @@ spring:
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+# ============ AI 助手(DeepSeek 中转,家属端首页小颐;key 注册后填入,勿提交公网仓库) ============
+ai:
+  deepseek:
+    base-url: https://api.deepseek.com
+    api-key: "sk-675bf31bee00428e921f677565bc6b75"
+    model: deepseek-chat

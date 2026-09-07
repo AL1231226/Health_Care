@@ -2,7 +2,7 @@
 // ============ 家属个人中心 ============
 // 参考真实 App（美团/饿了么风格）：顶部个人信息卡 + 订单状态条 + 功能宫格 + 设置列表 + 退出登录
 // 说明：后端目前仅有登录/注册接口，订单等数据均为静态假数据（TODO 标注后端接口）
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -10,6 +10,7 @@ import {
   Lock, Bell, InfoFilled, ArrowRight,
 } from '@element-plus/icons-vue'
 import { listUserOrders } from '@/api/order.js'
+import { changeUserPassword } from '@/api/user.js'
 
 const router = useRouter()
 
@@ -61,12 +62,64 @@ const handleTool = (t) => {
   }
 }
 
-// TODO: 修改密码 需后端接口；消息/关于 暂为占位
+// 消息/关于 暂为占位；修改密码已接真（key 为 password 走弹窗）
 const settings = [
-  { label: '修改密码', icon: Lock },
-  { label: '消息通知', icon: Bell },
-  { label: '关于平台', icon: InfoFilled },
+  { label: '修改密码', icon: Lock, key: 'password' },
+  { label: '消息通知', icon: Bell, key: '' },
+  { label: '关于平台', icon: InfoFilled, key: '' },
 ]
+
+const handleSetting = (s) => {
+  if (s.key === 'password') {
+    pwdDialogVisible.value = true
+    pwdForm.oldPassword = pwdForm.newPassword = pwdForm.confirmPassword = ''
+    // 表单挂载后清掉上次的校验痕迹（打开即重置，不复用旧内容）
+    nextTick(() => pwdFormRef.value?.clearValidate())
+  } else {
+    todo(s.label)
+  }
+}
+
+/* ---------- 修改密码（PUT /sys-user/self/password，归属取 token 本人） ---------- */
+const pwdDialogVisible = ref(false)
+const pwdFormRef = ref(null)
+const pwdSubmitting = ref(false)
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+// 密码规则与登录/注册同款：至少 6 位且包含字母和数字
+const pwdRules = {
+  oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { pattern: /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/, message: '密码至少 6 位，且需包含字母和数字', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    {
+      validator: (_, value, callback) => {
+        if (value !== pwdForm.newPassword) callback(new Error('两次输入的密码不一致'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+}
+const submitPassword = async () => {
+  const valid = await pwdFormRef.value.validate().catch(() => false)
+  if (!valid) return
+  pwdSubmitting.value = true
+  try {
+    const res = await changeUserPassword({ oldPassword: pwdForm.oldPassword, newPassword: pwdForm.newPassword })
+    if (res.success) {
+      ElMessage.success('密码修改成功，下次登录请使用新密码')
+      pwdDialogVisible.value = false
+      pwdFormRef.value?.resetFields()
+    } else {
+      ElMessage.error(res.errorMsg || '修改失败')
+    }
+  } catch (err) { /* 网络异常由拦截器统一提示 */ } finally {
+    pwdSubmitting.value = false
+  }
+}
 
 const todo = (name) => ElMessage.info(`${name}建设中，敬请期待`)
 
@@ -141,7 +194,7 @@ onMounted(loadOrders)
           <span class="card-title">账号与设置</span>
         </div>
         <div class="setting-list">
-          <div v-for="s in settings" :key="s.label" class="setting-item" @click="todo(s.label)">
+          <div v-for="s in settings" :key="s.label" class="setting-item" @click="handleSetting(s)">
             <el-icon class="setting-icon"><component :is="s.icon" /></el-icon>
             <span class="setting-label">{{ s.label }}</span>
             <el-icon class="setting-arrow"><ArrowRight /></el-icon>
@@ -152,6 +205,25 @@ onMounted(loadOrders)
       <!-- ======== 退出登录 ======== -->
       <el-button class="logout-btn" round @click="handleLogout">退出登录</el-button>
     </div>
+
+    <!-- ======== 修改密码弹窗 ======== -->
+    <el-dialog v-model="pwdDialogVisible" title="修改密码" width="400px" :close-on-click-modal="false">
+      <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-width="0">
+        <el-form-item prop="oldPassword">
+          <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
+        </el-form-item>
+        <el-form-item prop="newPassword">
+          <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="请输入新密码（至少 6 位，含字母和数字）" />
+        </el-form-item>
+        <el-form-item prop="confirmPassword">
+          <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" @keyup.enter="submitPassword" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="pwdDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="pwdSubmitting" @click="submitPassword">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

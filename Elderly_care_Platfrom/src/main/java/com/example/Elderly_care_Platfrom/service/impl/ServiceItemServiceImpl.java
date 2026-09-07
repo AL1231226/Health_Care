@@ -3,16 +3,29 @@ package com.example.Elderly_care_Platfrom.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.example.Elderly_care_Platfrom.dao.Result;
-import com.example.Elderly_care_Platfrom.entity.ServiceItem;
-import com.example.Elderly_care_Platfrom.mapper.ServiceItemMapper;
-import com.example.Elderly_care_Platfrom.service.IServiceItemService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.Elderly_care_Platfrom.dao.AdminItemVO;
+import com.example.Elderly_care_Platfrom.dao.Result;
+import com.example.Elderly_care_Platfrom.entity.ServiceCategory;
+import com.example.Elderly_care_Platfrom.entity.ServiceItem;
+import com.example.Elderly_care_Platfrom.entity.ServiceProvider;
+import com.example.Elderly_care_Platfrom.mapper.ServiceCategoryMapper;
+import com.example.Elderly_care_Platfrom.mapper.ServiceItemMapper;
+import com.example.Elderly_care_Platfrom.mapper.ServiceProviderMapper;
+import com.example.Elderly_care_Platfrom.service.IServiceItemService;
 import com.example.Elderly_care_Platfrom.utils.UserContext;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -24,6 +37,11 @@ import java.util.List;
  */
 @Service
 public class ServiceItemServiceImpl extends ServiceImpl<ServiceItemMapper, ServiceItem> implements IServiceItemService {
+
+    @Resource
+    private ServiceProviderMapper serviceProviderMapper;
+    @Resource
+    private ServiceCategoryMapper serviceCategoryMapper;
 
     /** 当前登录商家的 providerId（商家登录 token 的 userId 即 provider_id） */
     private Long currentProviderId() {
@@ -160,5 +178,70 @@ public class ServiceItemServiceImpl extends ServiceImpl<ServiceItemMapper, Servi
             return Result.fail("操作失败");
         }
         return Result.ok(status == 1 ? "已上架" : "已下架");
+    }
+
+    @Override
+    public Result listAdminItems(Integer status) {
+        // 全平台服务项目（监督视角，不带商家归属条件）；评分/销量直读接活列（score=评价均值/sales=已完成数）
+        List<ServiceItem> items = list(new QueryWrapper<ServiceItem>()
+                .eq(status != null, "status", status)
+                .orderByDesc("create_time"));
+        List<AdminItemVO> result = new ArrayList<>(items.size());
+        if (items.isEmpty()) {
+            return Result.ok(result, 0L);
+        }
+
+        // 关联字段一次批量查出（防 N+1，仿 ServiceOrderServiceImpl.listAdminOrders）
+        Set<Long> providerIds = new HashSet<>();
+        Set<Long> categoryIds = new HashSet<>();
+        for (ServiceItem it : items) {
+            if (it.getProviderId() != null) providerIds.add(it.getProviderId());
+            if (it.getCategoryId() != null) categoryIds.add(it.getCategoryId());
+        }
+        Map<Long, ServiceProvider> providerMap = toMap(serviceProviderMapper.selectBatchIds(providerIds), ServiceProvider::getProviderId);
+        Map<Long, ServiceCategory> categoryMap = toMap(serviceCategoryMapper.selectBatchIds(categoryIds), ServiceCategory::getCategoryId);
+
+        for (ServiceItem it : items) {
+            ServiceProvider provider = it.getProviderId() == null ? null : providerMap.get(it.getProviderId());
+            ServiceCategory category = it.getCategoryId() == null ? null : categoryMap.get(it.getCategoryId());
+            AdminItemVO vo = new AdminItemVO();
+            vo.setItemId(it.getItemId());
+            vo.setItemName(it.getItemName());
+            vo.setProviderId(it.getProviderId());
+            vo.setProviderName(provider == null ? null : provider.getProviderName());
+            vo.setCategoryId(it.getCategoryId());
+            vo.setCategoryName(category == null ? null : category.getCategoryName());
+            vo.setPrice(it.getPrice());
+            vo.setUnit(it.getUnit());
+            vo.setScore(it.getScore());
+            vo.setSales(it.getSales());
+            vo.setStatus(it.getStatus() == null ? 0 : it.getStatus().intValue());
+            vo.setCreateTime(it.getCreateTime());
+            result.add(vo);
+        }
+        return Result.ok(result, (long) result.size());
+    }
+
+    @Override
+    public Result toggleItemStatusByAdmin(Long id, Integer status) {
+        // 监督任意商家服务上下架：仅存在性校验，无归属校验（权限已由 RoleInterceptor 按 @RequireRole(ADMIN) 统一拦截）
+        if (status == null || (status != 0 && status != 1)) {
+            return Result.fail("状态参数不正确");
+        }
+        ServiceItem serviceItem = getById(id);
+        if (serviceItem == null) {
+            return Result.fail("服务不存在");
+        }
+        boolean result = update(new LambdaUpdateWrapper<ServiceItem>()
+                .eq(ServiceItem::getItemId, id)
+                .set(ServiceItem::getStatus, status.byteValue()));
+        if (!result) {
+            return Result.fail("操作失败");
+        }
+        return Result.ok(status == 1 ? "已上架" : "已下架");
+    }
+
+    private <T> Map<Long, T> toMap(List<T> list, Function<T, Long> keyFn) {
+        return list.stream().collect(Collectors.toMap(keyFn, Function.identity()));
     }
 }

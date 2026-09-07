@@ -48,4 +48,28 @@ public class ServiceCategoryController {
     public Result providerComments(@RequestParam Long providerId) {
         return serviceCategoryService.listProviderComments(providerId);
     }
+
+    /** 用户端：单个服务详情（公开接口，服务 + 所属商家名；仅上架且归属商家正常的服务可见） */
+    @GetMapping("/item-detail")
+    public Result itemDetail(@RequestParam Long itemId) {
+        return serviceCategoryService.getItemDetail(itemId);
+    }
+
+    /** 用户端：单个服务的评价列表（公开接口，带评价人昵称，最新在前） */
+    @GetMapping("/item-comments")
+    public Result itemComments(@RequestParam Long itemId) {
+        return serviceCategoryService.listItemComments(itemId);
+    }
+
+    /** 用户端：全局搜索（公开接口，keyword 匹配分类名/商家名/简介/服务名，返回服务 + 商家两组） */
+    @GetMapping("/search")
+    public Result search(@RequestParam(required = false) String keyword) {
+        return serviceCategoryService.search(keyword);
+    }
+
+    /** 用户端：首页热门推荐（公开接口，销量 Top8 服务 + Top4 商家） */
+    @GetMapping("/hot")
+    public Result hot() {
+        return serviceCategoryService.listHot();
+    }
 }

@@ -54,4 +54,12 @@ public interface IServiceOrderService extends IService<ServiceOrder> {
      * 全量订单 create_time 倒序，联查商家名/服务名/下单家属昵称/老人信息/地址拼装 VO，前端做状态筛选与关键词过滤
      */
     Result listAdminOrders();
+
+    /**
+     * 管理员端下单趋势统计(看板轮询用;仅管理员可达,越权同 listAdminOrders):
+     * 返回 {days:[{date,count}...](近 rangeDays 天逐日,含零日), hours:[{hour,count}...](仅统计今日 0-23 全量,含零时)}
+     *
+     * @param rangeDays 统计区间天数 1~365(前端 7/30),仅影响 days;hours 固定统计今日
+     */
+    Result listOrderTrend(int rangeDays);
 }

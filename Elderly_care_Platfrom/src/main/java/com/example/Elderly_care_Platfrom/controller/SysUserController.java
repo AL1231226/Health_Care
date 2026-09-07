@@ -1,6 +1,7 @@
 package com.example.Elderly_care_Platfrom.controller;
 
 import com.example.Elderly_care_Platfrom.annotation.RequireRole;
+import com.example.Elderly_care_Platfrom.dao.PasswordChangeRequest;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.service.ISysUserService;
 import com.example.Elderly_care_Platfrom.utils.RoleType;
@@ -8,6 +9,7 @@ import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,5 +40,12 @@ public class SysUserController {
     @PutMapping("/status/{id}")
     public Result toggleStatus(@PathVariable Long id, @RequestParam Integer status) {
         return sysUserService.toggleUserStatus(id, status);
+    }
+
+    /** 家属端自助修改密码（方法级 USER 覆盖类级 ADMIN，归属取 token；管理员/商家越权拒「无权限」） */
+    @RequireRole(RoleType.USER)
+    @PutMapping("/self/password")
+    public Result changePassword(@RequestBody PasswordChangeRequest req) {
+        return sysUserService.changeSelfPassword(req);
     }
 }

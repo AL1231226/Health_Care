@@ -28,4 +28,9 @@ public interface IServiceCommentService extends IService<ServiceComment> {
      * 商家端:本人店铺评分聚合(service_comment 实时平均 1 位小数;score 无评价为 null,reviewCount 评价条数)
      */
     Result getProviderScore();
+
+    /**
+     * 商家端:本人店铺全部评价列表(最新在前,关联订单号/被评服务名/家属昵称一次批量查出防 N+1)
+     */
+    Result listMyProviderComments();
 }

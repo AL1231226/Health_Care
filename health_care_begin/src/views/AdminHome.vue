@@ -1,17 +1,19 @@
 <script setup>
 // ============ 管理后台首页（纯前端静态版，未接后端） ============
 // TODO 后端接口就绪后逐块替换：审核/商家/用户/服务/分类/评价均接对应 controller
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import * as echarts from 'echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  DataBoard, User, Shop, List, Menu, Star, Tickets,
+  DataBoard, User, Shop, List, Tickets,
   Setting, ArrowDown, Search, Bell, Warning,
 } from '@element-plus/icons-vue'
 import { listProviders, reviewProvider, toggleProviderStatus } from '@/api/provider.js'
 import { listCategory } from '@/api/category.js'
+import { listAdminItems, toggleAdminItemStatus } from '@/api/item.js'
 import { listSysUsers, updateUserStatus } from '@/api/user.js'
-import { listAdminOrders } from '@/api/order.js'
+import { listAdminOrders, listAdminTrend } from '@/api/order.js'
 
 const router = useRouter()
 
@@ -21,12 +23,11 @@ const adminName = ref('超级管理员')
 /* ---------- 左侧菜单 ---------- */
 const menus = [
   { key: 'dashboard', label: '数据看板', icon: DataBoard },
-  { key: 'review', label: '商家审核', icon: Warning, badge: 3 },
+  { key: 'review', label: '商家审核', icon: Warning },
+  // 注:菜单徽标不写静态——review 的红色角标由 menuBadge 动态取待审核数(pendingProviders,status=0 真实接口)
   { key: 'provider', label: '商家管理', icon: Shop },
   { key: 'user', label: '用户管理', icon: User },
   { key: 'item', label: '服务管理', icon: List },
-  { key: 'category', label: '分类管理', icon: Menu },
-  { key: 'comment', label: '评价管理', icon: Star },
   { key: 'order', label: '订单管理', icon: Tickets },
   { key: 'setting', label: '系统设置', icon: Setting, building: true },
 ]
@@ -34,12 +35,12 @@ const activeMenu = ref('dashboard')
 const currentMenu = computed(() => menus.find((m) => m.key === activeMenu.value))
 
 /* ---------- 统计卡（家属/商家/待审核实时来自接口，其余仍为静态 TODO 接统计接口） ---------- */
+// 统计卡全部为真实接口数据;原静态「累计评价 3592」卡与下方「平台概况」整卡已按用户拍板删除(见 CHANGELOG 2026-09-07)
 const stats = computed(() => [
   { label: '注册家属', value: users.value.length, color: '#ff7a45' },
   { label: '入驻商家', value: providers.value.length, color: '#34a853' },
-  { label: '服务项目', value: 186, color: '#4a90d9' },
+  { label: '服务项目', value: adminItems.value.length, color: '#4a90d9' },
   { label: '待审核商家', value: pendingProviders.value.length, color: '#e6a23c' },
-  { label: '累计评价', value: 3592, color: '#9b59b6' },
 ])
 
 /* ---------- 分类映射（用于表格显示分类名，来自 service_category 接口） ---------- */
@@ -73,6 +74,9 @@ const loadPending = async () => {
     reviewLoading.value = false
   }
 }
+
+// 菜单徽标:仅「商家审核」动态取真实待审核数(0 时不显示角标,同统计卡/待办区口径);其余菜单无徽标
+const menuBadge = (m) => (m.key === 'review' ? pendingProviders.value.length : m.badge)
 
 /* ---------- 商家管理（全部商家，真实接口） ---------- */
 const providerLoading = ref(false)
@@ -178,39 +182,63 @@ const handleToggleUser = (row) => {
   }).catch(() => {})
 }
 
-/* ---------- 服务管理（全平台服务项目） ---------- */
-const items = ref([
-  { id: 1, name: '长者营养午餐', provider: '幸福食堂', category: '助餐', price: 28, unit: '餐', sales: 320, status: 1 },
-  { id: 2, name: '家庭深度保洁', provider: '阳光助洁家政', category: '助洁', price: 89, unit: '次', sales: 156, status: 1 },
-  { id: 3, name: '上门助浴服务', provider: '爱心助浴', category: '助浴', price: 128, unit: '次', sales: 89, status: 0 },
-  { id: 4, name: '康复理疗按摩', provider: '安康康复中心', category: '康复护理', price: 99, unit: '次', sales: 134, status: 1 },
-])
-const toggleItem = (row) => {
-  row.status = row.status === 1 ? 0 : 1
-  ElMessage.success(row.status === 1 ? `「${row.name}」已恢复上架` : `「${row.name}」已下架`)
+/* ---------- 服务管理（全平台项目监督，GET /service-item/admin/list 真实数据；状态/关键词过滤在前端做） ---------- */
+const itemLoading = ref(false)
+const adminItems = ref([])
+const ALL_ITEM_STATUS = -1 // 筛选哨兵：全部
+const itemFilter = ref(ALL_ITEM_STATUS)
+const itemKeyword = ref('')
+const itemStatusTabs = [
+  { value: ALL_ITEM_STATUS, label: '全部' },
+  { value: 0, label: '下架' },
+  { value: 1, label: '上架' },
+]
+const loadAdminItems = async () => {
+  itemLoading.value = true
+  try {
+    const res = await listAdminItems()
+    if (res.success) {
+      adminItems.value = res.data || []
+    } else {
+      ElMessage.error(res.errorMsg || '加载服务列表失败')
+    }
+  } catch (err) { /* 拦截器已统一提示 */ } finally {
+    itemLoading.value = false
+  }
 }
-
-/* ---------- 分类管理（service_category 五个分类） ---------- */
-const categories = ref([
-  { id: 1, name: '助餐服务', sort: 1, status: 1, itemCount: 38 },
-  { id: 2, name: '助洁服务', sort: 2, status: 1, itemCount: 45 },
-  { id: 3, name: '助浴服务', sort: 3, status: 1, itemCount: 22 },
-  { id: 4, name: '助医服务', sort: 4, status: 1, itemCount: 31 },
-  { id: 5, name: '康复护理', sort: 5, status: 1, itemCount: 50 },
-])
-
-/* ---------- 评价管理 ---------- */
-const comments = ref([
-  { id: 1, userName: '陈阿姨', itemName: '长者营养午餐', provider: '幸福食堂', score: 5, content: '饭菜很合老人胃口，服务及时，谢谢！', createTime: '2026-09-01 11:20' },
-  { id: 2, userName: '刘叔', itemName: '家庭深度保洁', provider: '阳光助洁家政', score: 4, content: '打扫得挺干净，时间也准时。', createTime: '2026-09-01 10:05' },
-  { id: 3, userName: '赵女士', itemName: '上门助浴服务', provider: '爱心助浴', score: 2, content: '预约时间临时改了好几次，体验一般。', createTime: '2026-08-31 19:42' },
-])
-const removeComment = (row) => {
-  ElMessageBox.confirm(`确定删除「${row.userName}」的这条评价吗？`, '删除评价', {
-    type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
-  }).then(() => {
-    comments.value = comments.value.filter((c) => c.id !== row.id)
-    ElMessage.success('评价已删除')
+const itemCounts = computed(() => {
+  const counts = { 0: 0, 1: 0 }
+  adminItems.value.forEach((it) => { if (counts[it.status] !== undefined) counts[it.status] += 1 })
+  return counts
+})
+// 状态 + 关键词双重过滤（关键词匹配 服务名称/商家名称，与状态筛选 AND）
+const filteredItems = computed(() => {
+  const kw = itemKeyword.value.trim().toLowerCase()
+  return adminItems.value.filter((it) => {
+    if (itemFilter.value !== ALL_ITEM_STATUS && it.status !== itemFilter.value) return false
+    if (!kw) return true
+    return [it.itemName, it.providerName].some((f) => f != null && String(f).toLowerCase().includes(kw))
+  })
+})
+// 上/下架监督（无归属限制）：confirm 后调接口成功再刷新列表
+const handleAdminToggle = (row) => {
+  const target = row.status === 1 ? 0 : 1
+  ElMessageBox.confirm(
+    target === 0 ? `确定下架「${row.itemName}」？下架后该服务不可再加购/下单，购物车中已加的行将失效` : `确定上架「${row.itemName}」？`,
+    target === 0 ? '下架服务' : '上架服务',
+    { type: target === 0 ? 'warning' : 'success', confirmButtonText: '确定', cancelButtonText: '取消' },
+  ).then(async () => {
+    try {
+      const result = await toggleAdminItemStatus(row.itemId, target)
+      if (result.success) {
+        ElMessage.success(result.data || '操作成功')
+        loadAdminItems()
+      } else {
+        ElMessage.error(result.errorMsg)
+      }
+    } catch (err) {
+      ElMessage.error('操作失败，请稍后重试')
+    }
   }).catch(() => {})
 }
 
@@ -309,25 +337,157 @@ const handleLogout = () => {
   }).catch(() => {})
 }
 
-// 时间兜底格式化（后端 Date 序列化可能是时间戳或字符串）
-const fmtDate = (v) => {
-  if (!v) return '-'
-  if (typeof v === 'number') return new Date(v).toLocaleString('zh-CN')
-  return String(v)
-}
-
 onMounted(() => {
   // 管理员名取登录存的 user_info.username，缺失兜底
   try {
     const saved = JSON.parse(localStorage.getItem('user_info') || '{}')
     if (saved.username) adminName.value = saved.username
   } catch (err) { /* 兜底默认值 */ }
-  // 加载数据（分类映射 + 待审核商家 + 全部商家 + 家属列表 + 全平台订单；订单数据看板/订单页共用一份）
+  // 加载数据（分类映射 + 待审核商家 + 全部商家 + 家属列表 + 全平台订单 + 全平台服务；订单/服务数据看板与各自页共用一份）
   loadCategories()
   loadPending()
   loadProviders()
   loadUsers()
   loadOrders()
+  loadAdminItems()
+  // 看板默认在首页：图表 DOM 就绪后初始化趋势图并开 30s 轮询
+  nextTick(() => {
+    initTrendChart()
+    loadTrend()
+    startTrendPolling()
+  })
+})
+
+/* ---------- 下单趋势（GET /service-order/admin/trend，按天/按小时双 Tab + 7/30 区间 + 30s 轮询实时刷新） ---------- */
+const trendRange = ref(7)
+const trendTab = ref('day') // day 按天(近 range 天逐日) / hour 按小时(统计今日各时段)
+const trendData = ref({ days: [], hours: [] })
+const trendLoading = ref(false)
+const trendChartEl = ref(null)
+let trendChart = null // echarts 实例（dashboard 区 v-if 卸载时 dispose，切回重建）
+
+const buildTrendOption = () => {
+  const isDay = trendTab.value === 'day'
+  // 按天取近 range 天逐日；按小时后端仅统计今日(0-23 含零时)，今日未到的小时截去不画，跨小时轮询后自然补上
+  let rows
+  if (isDay) {
+    rows = trendData.value.days
+  } else {
+    const nowHour = new Date().getHours()
+    rows = trendData.value.hours.filter((r) => r.hour <= nowHour)
+  }
+  const labels = rows.map((r) => (isDay ? String(r.date).slice(5) : `${r.hour}时`))
+  const values = rows.map((r) => r.count)
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        const p = params[0]
+        return `${p.name}：<b>${p.value}</b> 单`
+      },
+    },
+    grid: { left: 42, right: 14, top: 26, bottom: 30 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { lineStyle: { color: '#e8e0d8' } },
+      axisLabel: { color: '#8a8378', fontSize: 11, interval: 'auto' },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: '#a39c92', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#f4efe9' } },
+    },
+    series: [
+      {
+        type: 'bar',
+        data: values,
+        barMaxWidth: 26,
+        itemStyle: {
+          borderRadius: [6, 6, 0, 0],
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#ffa05f' },
+            { offset: 1, color: '#ff7a45' },
+          ]),
+        },
+      },
+    ],
+  }
+}
+
+// 图表容器存在则重绘（切换 Tab/区间/取回数据后调用；dashboard 切走 DOM 销毁，chart 一并释放）
+const renderTrend = () => {
+  if (!trendChartEl.value) return
+  if (!trendChart) trendChart = echarts.init(trendChartEl.value)
+  trendChart.setOption(buildTrendOption(), true)
+}
+const initTrendChart = () => {
+  // dashboard 从其它菜单切回时模板 v-if 重建 DOM，旧实例随 DOM 销毁需先释放再重建
+  if (trendChart) {
+    trendChart.dispose()
+    trendChart = null
+  }
+  nextTick(() => {
+    if (trendChartEl.value) {
+      trendChart = echarts.init(trendChartEl.value)
+      trendChart.setOption(buildTrendOption(), true)
+    }
+  })
+}
+const disposeTrendChart = () => {
+  if (trendChart) {
+    trendChart.dispose()
+    trendChart = null
+  }
+}
+
+// 拉数据后重绘；轮询与初次加载失败静默（下次轮询兜底，不打断看板）
+const loadTrend = async () => {
+  trendLoading.value = true
+  try {
+    const res = await listAdminTrend(trendRange.value)
+    if (res.success) {
+      trendData.value = res.data || { days: [], hours: [] }
+      renderTrend()
+    }
+  } catch (err) { /* 静默 */ } finally {
+    trendLoading.value = false
+  }
+}
+const switchTrendRange = () => loadTrend()
+const switchTrendTab = () => renderTrend()
+
+// 30s 轮询：仅看板页可见时维持（切走停表，切回立即刷一次并重启）
+let trendTimer = null
+const startTrendPolling = () => {
+  stopTrendPolling()
+  trendTimer = setInterval(loadTrend, 30000)
+}
+const stopTrendPolling = () => {
+  if (trendTimer) {
+    clearInterval(trendTimer)
+    trendTimer = null
+  }
+}
+watch(activeMenu, (v) => {
+  if (v === 'dashboard') {
+    initTrendChart()
+    loadTrend() // 离开期间可能有新订单，切回先刷一次
+    startTrendPolling()
+  } else {
+    disposeTrendChart()
+    stopTrendPolling()
+  }
+})
+// 窗口缩放图表自适应
+const onWinResize = () => trendChart?.resize()
+window.addEventListener('resize', onWinResize)
+onBeforeUnmount(() => {
+  stopTrendPolling()
+  disposeTrendChart()
+  window.removeEventListener('resize', onWinResize)
 })
 </script>
 
@@ -349,7 +509,7 @@ onMounted(() => {
         >
           <el-icon class="nav-icon"><component :is="m.icon" /></el-icon>
           <span class="nav-label">{{ m.label }}</span>
-          <span v-if="m.badge" class="nav-badge">{{ m.badge }}</span>
+          <span v-if="menuBadge(m)" class="nav-badge">{{ menuBadge(m) }}</span>
           <span v-if="m.building" class="nav-tag">建设中</span>
         </button>
       </nav>
@@ -394,6 +554,27 @@ onMounted(() => {
             </div>
           </section>
 
+          <!-- ====== 下单趋势（30s 轮询实时刷新） ====== -->
+          <section class="card trend-card">
+            <div class="card-head">
+              <h3>下单趋势</h3>
+              <div class="trend-ctrls">
+                <!-- 区间仅对「按天」有意义(近 range 天逐日)；「按小时」固定统计今日，故仅按天时显示区间切换 -->
+                <el-radio-group v-if="trendTab === 'day'" v-model="trendRange" size="small" @change="switchTrendRange">
+                  <el-radio-button :value="7">近7天</el-radio-button>
+                  <el-radio-button :value="30">近30天</el-radio-button>
+                </el-radio-group>
+                <span v-else class="trend-today-label">统计今日</span>
+                <el-radio-group v-model="trendTab" size="small" class="trend-tab-group" @change="switchTrendTab">
+                  <el-radio-button value="day">按天</el-radio-button>
+                  <el-radio-button value="hour">按小时</el-radio-button>
+                </el-radio-group>
+              </div>
+            </div>
+            <div ref="trendChartEl" v-loading="trendLoading" class="trend-chart"></div>
+            <p class="trend-tip">{{ trendTab === 'day' ? '每 30 秒自动刷新，新订单最多延迟 30 秒反映在图上' : '统计今日 0 点至今的各时段下单，每 30 秒自动刷新' }}</p>
+          </section>
+
           <section class="card todo-card">
             <div class="card-head">
               <h3>待办事项</h3>
@@ -405,7 +586,7 @@ onMounted(() => {
                 <div class="todo-info">
                   <span class="todo-name">{{ p.providerName }}</span>
                   <span class="tag">{{ categoryMap[p.categoryId] || '未分类' }}</span>
-                  <span class="todo-meta">联系人 {{ p.legalPerson || '-' }} · {{ fmtDate(p.createTime) }}</span>
+                  <span class="todo-meta">联系人 {{ p.legalPerson || '-' }} · {{ fmtDateTime(p.createTime) }}</span>
                 </div>
                 <div class="todo-actions">
                   <el-button size="small" type="success" plain @click="handleReview(p, true)">通过</el-button>
@@ -433,19 +614,6 @@ onMounted(() => {
             </div>
           </section>
 
-          <section class="card todo-card">
-            <div class="card-head">
-              <h3>平台概况</h3>
-            </div>
-            <div class="overview-grid">
-              <div class="overview-item"><p class="ov-num">5</p><p class="ov-label">服务分类</p></div>
-              <div class="overview-item"><p class="ov-num">1286</p><p class="ov-label">家属档案</p></div>
-              <div class="overview-item"><p class="ov-num">42</p><p class="ov-label">入驻商家</p></div>
-              <div class="overview-item"><p class="ov-num">186</p><p class="ov-label">服务项目</p></div>
-              <div class="overview-item"><p class="ov-num">3592</p><p class="ov-label">累计评价</p></div>
-            </div>
-            <p class="table-hint">以上为静态演示数据，后续接入统计接口（TODO）</p>
-          </section>
         </template>
 
         <!-- ====== 商家审核 ====== -->
@@ -462,8 +630,8 @@ onMounted(() => {
               <template #default="{ row }">{{ row.legalPerson || '-' }}</template>
             </el-table-column>
             <el-table-column prop="phone" label="联系电话" width="130" />
-            <el-table-column label="申请时间" width="160">
-              <template #default="{ row }">{{ fmtDate(row.createTime) }}</template>
+            <el-table-column label="申请时间" width="165">
+              <template #default="{ row }">{{ fmtDateTime(row.createTime) }}</template>
             </el-table-column>
             <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
@@ -487,8 +655,8 @@ onMounted(() => {
             <el-table-column prop="legalPerson" label="负责人" width="110">
               <template #default="{ row }">{{ row.legalPerson || '-' }}</template>
             </el-table-column>
-            <el-table-column label="入驻时间" width="160">
-              <template #default="{ row }">{{ fmtDate(row.createTime) }}</template>
+            <el-table-column label="入驻时间" width="165">
+              <template #default="{ row }">{{ fmtDateTime(row.createTime) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="120">
               <template #default="{ row }">
@@ -524,7 +692,7 @@ onMounted(() => {
               <template #default="{ row }">{{ row.role === 1 ? '家属' : '其他' }}</template>
             </el-table-column>
             <el-table-column label="注册时间" width="170">
-              <template #default="{ row }">{{ fmtDate(row.createTime) }}</template>
+              <template #default="{ row }">{{ fmtDateTime(row.createTime) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="120">
               <template #default="{ row }">
@@ -541,78 +709,69 @@ onMounted(() => {
           </el-table>
         </section>
 
-        <!-- ====== 服务管理 ====== -->
+        <!-- ====== 服务管理（全平台项目监督，真实数据） ====== -->
         <section v-else-if="activeMenu === 'item'" class="card">
-          <div class="card-head"><h3>全平台服务项目（{{ items.length }}）</h3></div>
-          <el-table :data="items" stripe>
-            <el-table-column prop="name" label="服务名称" min-width="180" />
-            <el-table-column prop="provider" label="所属商家" min-width="160" />
+          <div class="card-head">
+            <h3>全平台服务项目（{{ adminItems.length }}）</h3>
+            <el-button class="primary-btn" type="primary" :loading="itemLoading" @click="loadAdminItems">刷新</el-button>
+          </div>
+          <div class="order-bar">
+            <div class="filter-group">
+              <span
+                v-for="t in itemStatusTabs"
+                :key="t.value"
+                class="filter-capsule"
+                :class="{ active: itemFilter === t.value }"
+                @click="itemFilter = t.value"
+              >
+                {{ t.label }}
+                <span v-if="t.value !== ALL_ITEM_STATUS" class="filter-count">{{ itemCounts[t.value] || 0 }}</span>
+              </span>
+            </div>
+            <el-input
+              v-model="itemKeyword"
+              class="order-search"
+              placeholder="搜索服务名称 / 商家名称"
+              :prefix-icon="Search"
+              clearable
+            />
+          </div>
+          <el-table v-loading="itemLoading" :data="filteredItems" stripe>
+            <el-table-column prop="itemName" label="服务名称" min-width="180" show-overflow-tooltip />
+            <el-table-column label="所属商家" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.providerName || '商家已注销' }}</template>
+            </el-table-column>
             <el-table-column label="分类" width="110">
-              <template #default="{ row }"><span class="cat-chip">{{ row.category }}</span></template>
+              <template #default="{ row }"><span class="cat-chip">{{ row.categoryName || '未分类' }}</span></template>
             </el-table-column>
             <el-table-column label="价格" width="110">
               <template #default="{ row }"><span class="price">¥{{ row.price }}</span><span class="price-unit">/{{ row.unit }}</span></template>
             </el-table-column>
-            <el-table-column prop="sales" label="销量" width="90" />
-            <el-table-column label="状态" width="120">
+            <el-table-column label="评分" width="80">
+              <template #default="{ row }">
+                <span v-if="row.score != null" class="score">{{ Number(row.score).toFixed(1) }}</span>
+                <span v-else class="muted-text">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="销量" width="70">
+              <template #default="{ row }">{{ row.sales ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
               <template #default="{ row }">
                 <span class="status-badge" :class="row.status === 1 ? 'ok' : 'off'">{{ row.status === 1 ? '上架' : '下架' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120" fixed="right">
+            <el-table-column label="创建时间" width="165">
+              <template #default="{ row }">{{ fmtDateTime(row.createTime) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="100" fixed="right">
               <template #default="{ row }">
-                <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'" plain @click="toggleItem(row)">
+                <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'" plain @click="handleAdminToggle(row)">
                   {{ row.status === 1 ? '下架' : '上架' }}
                 </el-button>
               </template>
             </el-table-column>
-          </el-table>
-        </section>
-
-        <!-- ====== 分类管理 ====== -->
-        <section v-else-if="activeMenu === 'category'" class="card">
-          <div class="card-head">
-            <h3>服务分类（{{ categories.length }}）</h3>
-            <el-button class="primary-btn" type="primary" @click="ElMessage.info('分类新增/编辑功能建设中（TODO）')">＋ 新增分类</el-button>
-          </div>
-          <el-table :data="categories" stripe>
-            <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="name" label="分类名称" min-width="180" />
-            <el-table-column prop="sort" label="排序" width="100" />
-            <el-table-column prop="itemCount" label="服务项目数" width="120" />
-            <el-table-column label="状态" width="120">
-              <template #default="{ row }">
-                <span class="status-badge" :class="row.status === 1 ? 'ok' : 'off'">{{ row.status === 1 ? '启用' : '停用' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="140" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" type="primary" link @click="ElMessage.info('编辑建设中（TODO）')">编辑</el-button>
-                <el-button size="small" type="danger" link @click="ElMessage.info('删除建设中（TODO）')">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </section>
-
-        <!-- ====== 评价管理 ====== -->
-        <section v-else-if="activeMenu === 'comment'" class="card">
-          <div class="card-head"><h3>全平台评价（{{ comments.length }}）</h3></div>
-          <el-table :data="comments" stripe>
-            <el-table-column prop="userName" label="评价人" width="120" />
-            <el-table-column prop="itemName" label="服务" min-width="160" />
-            <el-table-column prop="provider" label="商家" min-width="150" />
-            <el-table-column label="评分" width="100">
-              <template #default="{ row }">
-                <span class="score">{{ '★'.repeat(row.score) }}<span class="score-empty">{{ '★'.repeat(5 - row.score) }}</span></span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="content" label="内容" min-width="220" show-overflow-tooltip />
-            <el-table-column prop="createTime" label="时间" width="150" />
-            <el-table-column label="操作" width="90" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" type="danger" link @click="removeComment(row)">删除</el-button>
-              </template>
-            </el-table-column>
+            <template #empty><el-empty description="暂无相关服务" /></template>
           </el-table>
         </section>
 
@@ -938,7 +1097,7 @@ onMounted(() => {
 /* 统计卡 */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   margin-bottom: 16px;
 }
@@ -995,33 +1154,34 @@ onMounted(() => {
   font-size: 12px;
 }
 
-/* 平台概况 */
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+/* ============ 下单趋势 ============ */
+.trend-card {
+  margin-bottom: 16px;
 }
-.overview-item {
-  text-align: center;
-  padding: 14px 8px;
-  border-radius: 12px;
-  background: #faf5ef;
+.trend-ctrls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.ov-num {
-  font-size: 22px;
-  font-weight: 700;
-  color: #ff7a45;
+.trend-tab-group {
+  margin-left: 4px;
 }
-.ov-label {
-  margin-top: 4px;
+.trend-today-label {
   font-size: 12px;
-  color: #a39c92;
+  color: #8a8378;
+  line-height: 24px;
+  height: 24px;
+  padding: 0 12px;
 }
-.table-hint {
-  margin-top: 14px;
-  text-align: center;
+.trend-chart {
+  width: 100%;
+  height: 300px;
+}
+.trend-tip {
+  margin-top: 6px;
   font-size: 12px;
   color: #c0b9ae;
+  text-align: right;
 }
 
 /* 表格通用 */
@@ -1258,9 +1418,6 @@ onMounted(() => {
     padding: 0;
   }
   .stats-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .overview-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }

@@ -46,4 +46,11 @@ public class ServiceCommentController {
     public Result providerScore() {
         return serviceCommentService.getProviderScore();
     }
+
+    /** 商家端:本人店铺全部评价列表(最新在前,含订单号/服务名/家属昵称;方法级 PROVIDER,越权同拒「无权限」) */
+    @RequireRole(RoleType.PROVIDER)
+    @GetMapping("/provider/list")
+    public Result providerComments() {
+        return serviceCommentService.listMyProviderComments();
+    }
 }

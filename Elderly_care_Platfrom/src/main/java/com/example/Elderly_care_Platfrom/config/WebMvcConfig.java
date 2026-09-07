@@ -16,7 +16,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     /** 需登录的业务接口前缀（auth 登录/注册与 service-category 公开浏览除外），登录/角色两拦截器共用 */
     private static final String[] PROTECTED_PATTERNS = {"/address/**", "/elder-profile/**", "/service-provider/**",
-            "/sys-user/**", "/service-item/**", "/service-order/**", "/service-comment/**", "/service-cart/**"};
+            "/sys-user/**", "/service-item/**", "/service-order/**", "/service-comment/**", "/service-cart/**",
+            "/ai/**"};
 
     @Override
     //拦截器

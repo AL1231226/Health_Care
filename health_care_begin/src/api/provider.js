@@ -31,6 +31,27 @@ export const getProviderComments = (providerId) => {
   return request.get('/service-category/provider-comments', { params: { providerId } })
 }
 
+// 单个服务详情（用户端公开接口）：GET /service-category/item-detail?itemId=，仅上架且归属商家正常的服务可见
+export const getItemDetail = (itemId) => {
+  return request.get('/service-category/item-detail', { params: { itemId } })
+}
+
+// 单个服务的评价列表（用户端公开接口）：GET /service-category/item-comments?itemId=，最新在前
+export const getItemComments = (itemId) => {
+  return request.get('/service-category/item-comments', { params: { itemId } })
+}
+
+// 全局搜索（用户端公开接口，后端 ServiceCategoryController）：GET /service-category/search?keyword=，
+// 返回 { items: 命中服务[], providers: 命中商家[] } 两组（服务/商家卡片同列表页形态）
+export const searchAll = (keyword) => {
+  return request.get('/service-category/search', { params: { keyword } })
+}
+
+// 首页热门推荐（用户端公开接口）：GET /service-category/hot，返回 { items: 销量Top8服务[], providers: 销量Top4商家[] }
+export const listHot = () => {
+  return request.get('/service-category/hot')
+}
+
 // 商家本人店铺资料（商家端）：GET /service-provider/self，返回最新行（密码剔除）
 export const getSelfProvider = () => {
   return request.get('/service-provider/self')

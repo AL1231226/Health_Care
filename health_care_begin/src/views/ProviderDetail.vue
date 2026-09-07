@@ -65,8 +65,11 @@ onMounted(() => {
   loadComments()
 })
 
-// 点服务行或「购买」进入下单页（当前为静态参考页，把服务展示字段带过去）
-const onItemClick = (item) => {
+// 点服务行主体 → 服务详情页（看该服务介绍与评价），详情页内可预约下单
+const goItem = (item) => router.push(`/user/item/${item.itemId}`)
+
+// 服务行「购买」按钮 → 下单确认页（带齐字段，OrderConfirm 直读 query 不再拉接口）
+const buyNow = (item) => {
   router.push({
     path: '/user/order',
     query: {
@@ -190,7 +193,7 @@ const avatarStyle = (name) => {
       <section v-if="detail" class="section">
         <h4 class="section-title">全部服务 ({{ detail.items.length }})</h4>
         <div class="item-list">
-          <div v-for="item in detail.items" :key="item.itemId" class="item-row" @click="onItemClick(item)">
+          <div v-for="item in detail.items" :key="item.itemId" class="item-row" @click="goItem(item)">
             <div class="item-info">
               <span class="item-name">{{ item.itemName }}</span>
               <span class="item-desc">{{ item.detail || '暂无描述' }}</span>
@@ -210,7 +213,7 @@ const avatarStyle = (name) => {
                   :loading="addingItemId === item.itemId"
                   @click.stop="onAddToCart(item)"
                 >加入购物车</el-button>
-                <el-button size="small" round class="buy-btn" @click.stop="onItemClick(item)">购买</el-button>
+                <el-button size="small" round class="buy-btn" @click.stop="buyNow(item)">购买</el-button>
               </div>
             </div>
           </div>

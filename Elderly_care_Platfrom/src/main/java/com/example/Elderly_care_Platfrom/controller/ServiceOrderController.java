@@ -71,4 +71,11 @@ public class ServiceOrderController {
     public Result adminList() {
         return serviceOrderService.listAdminOrders();
     }
+
+    /** 管理员端：下单趋势统计（数据看板 30s 轮询用；range 区间天数 7/30 仅影响按天序列，按小时固定统计今日，越权同拒） */
+    @RequireRole(RoleType.ADMIN)
+    @GetMapping("/admin/trend")
+    public Result adminTrend(@RequestParam(defaultValue = "7") int range) {
+        return serviceOrderService.listOrderTrend(range);
+    }
 }

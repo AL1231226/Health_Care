@@ -1,7 +1,7 @@
 # 项目实时进度文档（颐养平台 · 居家养老服务预约）
 
 > 本文档随开发持续更新,新会话先读它 + `CLAUDE.md` + `CHANGELOG.md`,即可接手。
-> 最后更新:2026-09-07(商家端平均评分统计卡接真:GET /service-comment/provider/score 实时聚合,不读 service_item.score 死列)
+> 最后更新:2026-09-07(管理员端服务管理接真:GET /service-item/admin/list + PUT /service-item/admin/status/{itemId} 方法级 ADMIN;评分/销量直读已接活的 service_item.score/sales 列)
 
 ## 一、项目全貌
 
@@ -36,14 +36,14 @@
 | 发表评价 | ✅ | 2026-09-04 落地:已完成(2)订单卡片/抽屉「去评价」+ 我的评价页双区(待评价/已评价),一单一评挂 order_id(唯一索引),商家分实时聚合闭环;不回填 item 冗余列 |
 
 ### 商家端(✅ 服务 + 订单 双 Tab 工作台 `MerchantHome.vue`)
-- **服务项目 Tab**:增删改查/上下架/统计卡(总数/上架/下架实时,**平均评分 2026-09-07 接真 = `GET /service-comment/provider/score` 按 service_comment 实时聚合本人店铺评价,0 评价显示「—」;`service_item.score/sales` 冗余死列保留未动,待议**),接 `/service-item/*`
+- **服务项目 Tab**:增删改查/上下架/统计卡(总数/上架/下架实时,**平均评分 2026-09-07 接真 = `GET /service-comment/provider/score` 按 service_comment 实时聚合本人店铺评价,0 评价显示「—」**;`service_item.score/sales` 冗余列已接活(6ccb3e8 设计:score=评价均值/sales=已完成订单数,写路径同事务回填+存量回填,管理员端服务管理列表直读),接 `/service-item/*`
 - **订单管理 Tab(2026-09-02 落地)**:状态筛选(角标)+ 表格 + **详情抽屉(服务老人健康备注必看)** + 接单(0→1)/完成服务(1→2),接 `/service-order/merchant/list`、`/service-order/status/{id}`
 - **店铺资料编辑(2026-09-07 落地,主营分类即日修订为只读)**:店铺信息卡「编辑资料」接真,弹窗查改本人店铺资料——`GET/PUT /service-provider/self`(**方法级 @RequireRole(PROVIDER) 覆盖类级 ADMIN**,admin/family 打 /self 拒「无权限」,类级三管理员端点不受影响);白名单四字段(名称/负责人/简介/详细地址),**主营分类与 phone 同属入驻归属信息只读不可改**(后端不接收 categoryId,篡改不落库,弹窗分类 select disabled + 提示);保存成功整对象同步店铺卡 + localStorage user_info,无需重登;店铺状态/待审核提示已处理
 
 ### 管理员端 `AdminHome.vue`
 - ✅ 用户管理(家属禁启)、商家审核(通过/驳回)、商家管理(启停)、待办看板(实时)、**订单管理(2026-09-04 落地:全平台只读监督)**、**角色权限统一校验(2026-09-07 落地:@RequireRole + RoleInterceptor,本组三接口全部类级 ADMIN 标注)**
 - 订单管理只读监督: `GET /service-order/admin/list`(role=2 守卫,家属/商家越权「无权限」),状态筛选胶囊带角标 + 关键词搜索(商家/服务/老人/家属/订单号)+ 富表格 + 详情抽屉(含下单家属昵称/老人健康备注,纯查看);数据看板待办区「待接单新订单 N」卡联动(查看全部 → 订单管理自动选待接单),订单数据一次加载看板/订单页共享
-- 🧩 数据看板统计卡部分静态;⏳ 服务管理、分类管理、评价管理(删除)、系统设置
+- ✅ **服务管理**(2026-09-07 监督接真:全平台项目列表联商家/分类名 + 上下架,接口落 ServiceItemController **方法级 @RequireRole(ADMIN) 覆盖类级 PROVIDER**,评分/销量直读已接活列;设计文档 2026-09-07-admin-item-manage-design.md);🧩 数据看板统计卡部分静态(「服务项目」卡已顺手改真,累计评价卡/平台概况仍静态);⏳ 分类管理、评价管理(删除)、系统设置
 
 ## 三、订单模块现状(重点,2026-09-02 主链路)
 

@@ -11,3 +11,6 @@ export const listMyComments = () => request.get('/service-comment/my')
 
 // 商家本人店铺评分聚合：GET /service-comment/provider/score（仅商家角色可调；返回 { score(1位小数,无评价null), reviewCount }）
 export const getProviderScore = () => request.get('/service-comment/provider/score')
+
+// 商家本人店铺全部评价列表：GET /service-comment/provider/list（仅商家角色可调；最新在前，含订单号/被评服务名/家属昵称）
+export const listStoreComments = () => request.get('/service-comment/provider/list')

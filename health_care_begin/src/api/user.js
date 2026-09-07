@@ -27,3 +27,7 @@ export const listSysUsers = (status) => {
 export const updateUserStatus = (id, status) => {
     return request.put(`/sys-user/status/${id}`, null, { params: { status } })
 }
+//家属端自助修改密码（本人）：PUT /sys-user/self/password，data: { oldPassword, newPassword }
+export const changeUserPassword = (data) => {
+    return request.put('/sys-user/self/password', data)
+}

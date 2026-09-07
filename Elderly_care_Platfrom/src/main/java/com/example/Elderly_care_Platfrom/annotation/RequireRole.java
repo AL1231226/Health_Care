@@ -14,7 +14,9 @@ import java.lang.annotation.Target;
  * @author 龙源lll
  * @since 2026-09-07
  */
+//类和方法均可用该注解
 @Target({ElementType.TYPE, ElementType.METHOD})
+//运行时可获取该注解,方便拦截器读取
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface RequireRole {

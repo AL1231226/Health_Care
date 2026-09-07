@@ -14,10 +14,10 @@ import java.util.List;
  * GET /service-category/providers(分类下商家列表)与 GET /service-category/provider-detail(商家详情)
  * </p>
  * <p>
- * 两个接口结构同构(商家基础信息 + 上架(1)服务项目 + 评分/评价数聚合),detail 是列表的超集:
- * 列表接口只填卡片所需的公共字段(下方标注「仅详情填充」的字段保持 null),
- * 详情接口全量填充。原 ProviderWithItemsVO 已并入本类(两接口唯一装配点在
- * ServiceCategoryServiceImpl.listCategoryProviders / getProviderDetail)
+ * 三个接口结构同构(商家基础信息 + 上架(1)服务项目 + 评分/评价数聚合),detail 是列表的超集:
+ * 列表/搜索接口只填卡片所需的公共字段(下方标注「仅详情填充」的字段保持 null),
+ * 详情接口全量填充。装配点:ServiceCategoryServiceImpl.listCategoryProviders /
+ * getProviderDetail / search(搜索接口额外填 categoryName 供卡片标签展示)
  * </p>
  * <p>
  * ServiceProvider 实体只对应 service_provider 表的一行,无法表达"商家 + 其名下服务项目"的一对多嵌套,
@@ -72,16 +72,17 @@ public class ProviderDetailVO {
     private Integer reviewCount;
 
     /**
-     * 上架(1)服务项目(直接复用实体):列表接口为该分类下的,详情接口为该商家全部
+     * 主营分类名(联 service_category 字典,查不到为 null 前端兜底):详情与搜索接口填充
+     * (详情页标签/搜索结果卡片用),分类下商家列表不填(该页有页标题,少下发字段)
+     */
+    private String categoryName;
+
+    /**
+     * 上架(1)服务项目(直接复用实体):分类浏览列表为该分类下的,搜索/详情接口为该商家名下全部
      */
     private List<ServiceItem> items;
 
-    /** 以下字段仅详情接口填充,列表接口保持 null(勿在列表填充,公开接口少下发字段) */
-
-    /**
-     * 主营分类名(联 service_category 字典,查不到为 null 前端兜底)
-     */
-    private String categoryName;
+    /** 以下字段仅详情接口填充,其余公开列表/搜索接口保持 null(勿在列表填充,公开接口少下发字段) */
 
     /**
      * 负责人姓名

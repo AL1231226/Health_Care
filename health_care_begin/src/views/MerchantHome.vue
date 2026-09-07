@@ -9,7 +9,7 @@ import { listItems, addItem, updateItem, deleteItem, toggleItemStatus } from '@/
 import { listCategory } from '@/api/category.js'
 import { listMerchantOrders, updateOrderStatus } from '@/api/order.js'
 import { getSelfProvider, updateSelfProvider } from '@/api/provider.js'
-import { getProviderScore } from '@/api/comment.js'
+import { getProviderScore, listStoreComments } from '@/api/comment.js'
 
 const router = useRouter()
 
@@ -99,6 +99,28 @@ const loadProviderScore = async () => {
       providerReviewCount.value = res.data?.reviewCount ?? 0
     }
   } catch (err) { /* 拉取失败保持「—」，不阻塞整页 */ }
+}
+
+/* ---------- 本店评价（GET /service-comment/provider/list，本店全部评价最新在前，只读） ---------- */
+const commentLoading = ref(false)
+const comments = ref([])
+const loadComments = async () => {
+  commentLoading.value = true
+  try {
+    const res = await listStoreComments()
+    if (res.success) {
+      comments.value = res.data || []
+    } else {
+      ElMessage.error(res.errorMsg || '加载评价列表失败')
+    }
+  } catch (err) { /* 拦截器已统一提示 */ } finally {
+    commentLoading.value = false
+  }
+}
+// 评价管理卡头「刷新」：重拉评价列表 + 统计卡平均分（家属新评价后同步最新）
+const refreshComments = () => {
+  loadComments()
+  loadProviderScore()
 }
 
 /* ---------- 服务项目：新增 / 编辑弹窗 ---------- */
@@ -391,6 +413,7 @@ onMounted(() => {
   loadItems()
   loadOrders()
   loadProviderScore()
+  loadComments()
 })
 </script>
 
@@ -450,7 +473,7 @@ onMounted(() => {
         <el-button class="edit-btn" plain @click="openProfileEdit">编辑资料</el-button>
       </section>
 
-      <!-- ======== 服务项目 / 订单管理 Tab ======== -->
+      <!-- ======== 服务项目 / 订单管理 / 评价管理 Tab ======== -->
       <el-tabs v-model="activeTab" class="work-tabs">
         <!-- ---------- Tab：服务项目 ---------- -->
         <el-tab-pane label="服务项目" name="items">
@@ -583,6 +606,57 @@ onMounted(() => {
               </el-table-column>
             </el-table>
             <el-empty v-if="!orderLoading && !filteredOrders.length" description="暂无相关订单" />
+          </section>
+        </el-tab-pane>
+
+        <!-- ---------- Tab：评价管理（本店全部评价只读，最新在前） ---------- -->
+        <el-tab-pane label="评价管理" name="comments">
+          <section class="card orders-card">
+            <div class="card-head orders-head">
+              <h3>评价管理</h3>
+              <div class="comment-head-right">
+                <span class="comment-total">共 {{ comments.length }} 条</span>
+                <el-button size="small" plain @click="refreshComments">刷新</el-button>
+              </div>
+            </div>
+
+            <el-table :data="comments" v-loading="commentLoading" stripe>
+              <el-table-column label="家属" width="120">
+                <template #default="{ row }">
+                  <span class="comment-user">{{ row.userName || '匿名用户' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="服务项目" min-width="150">
+                <template #default="{ row }">
+                  <span v-if="row.itemName">{{ row.itemName }}</span>
+                  <span v-else class="muted-text">服务已删除</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="订单号" width="180">
+                <template #default="{ row }">
+                  <span v-if="row.orderNo" class="order-no-cell">{{ row.orderNo }}</span>
+                  <span v-else class="muted-text">—</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="评分" width="150">
+                <template #default="{ row }">
+                  <el-rate :model-value="row.score" disabled size="small" class="cell-rate" />
+                </template>
+              </el-table-column>
+              <el-table-column label="评价内容" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.content" class="comment-content">{{ row.content }}</span>
+                  <span v-else class="muted-text">未填写内容</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="评价时间" width="165">
+                <template #default="{ row }">
+                  <span v-if="row.createTime">{{ fmtDateTime(row.createTime) }}</span>
+                  <span v-else class="muted-text">—</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="!commentLoading && !comments.length" description="暂无评价，家属完成服务后会在订单里留下评价" />
           </section>
         </el-tab-pane>
       </el-tabs>
@@ -738,6 +812,32 @@ onMounted(() => {
 }
 .muted-text {
   color: #c0b9ae;
+}
+/* ============ 评价管理 ============ */
+.comment-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.comment-total {
+  font-size: 13px;
+  color: #a39c92;
+}
+.comment-user {
+  font-size: 13px;
+  color: #2d2a26;
+}
+.comment-content {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-rate {
+  transform: scale(0.85);
+  transform-origin: left center;
+  vertical-align: middle;
 }
 .elder-sex {
   color: #a39c92;

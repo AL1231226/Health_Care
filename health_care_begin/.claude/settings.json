@@ -12,7 +12,9 @@
       "Bash(echo \"pexels CDN: $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://images.pexels.com/photos/5794055/pexels-photo-5794055.jpeg?w=600'\\)\")",
       "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://cdn.pixabay.com/photo/2023/06/08/11/45/food-8050276_640.jpg')",
       "Bash(echo \"pixabay CDN: $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://cdn.pixabay.com/photo/2023/06/08/11/45/food-8050276_640.jpg'\\)\")",
-      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Boudin_Bakery%2C_Los_Angeles_-_a_packaged_loaf_%2848257628947%29.jpg/640px-Boudin_Bakery%2C_Los_Angeles_-_a_packaged_loaf_%2848257628947%29.jpg')"
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -A 'Mozilla/5.0' 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Boudin_Bakery%2C_Los_Angeles_-_a_packaged_loaf_%2848257628947%29.jpg/640px-Boudin_Bakery%2C_Los_Angeles_-_a_packaged_loaf_%2848257628947%29.jpg')",
+      "Bash(tasklist //FI \"PID eq 277756\")",
+      "Bash(echo \"EXIT=$?\")"
     ],
     "additionalDirectories": [
       "d:\\Elderly_care_Platfrom\\src\\main\\java\\com\\example\\Elderly_care_Platfrom\\service\\impl",

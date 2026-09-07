@@ -25,9 +25,17 @@ const handleNav = (item) => {
   }
 }
 
-// TODO: 搜索、消息通知 后续接入
+// 消息通知未接入
 const keyword = ref('')
-const handleSearch = () => ElMessage.info('搜索功能建设中，敬请期待')
+// 顶栏搜索：带关键词跳搜索结果页（页面内再次搜索会经 query 变化触发重拉）
+const handleSearch = () => {
+  const kw = keyword.value.trim()
+  if (!kw) {
+    ElMessage.warning('请输入搜索内容')
+    return
+  }
+  router.push({ path: '/user/search', query: { keyword: kw } })
+}
 const handleBell = () => ElMessage.info('消息中心建设中，敬请期待')
 
 // 退出登录：清除本地 token 和用户信息，回到登录页

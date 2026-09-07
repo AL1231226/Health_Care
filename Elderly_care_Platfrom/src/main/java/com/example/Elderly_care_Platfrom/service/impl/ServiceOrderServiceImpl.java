@@ -27,12 +27,18 @@ import com.example.Elderly_care_Platfrom.service.IServiceOrderService;
 import com.example.Elderly_care_Platfrom.utils.UserContext;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -325,6 +331,7 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
     }
 
     @Override
+    @Transactional
     public Result updateOrderStatus(Long orderId, Integer status) {
         if (status == null || (status != 1 && status != 2)) {
             return Result.fail("状态参数不正确");
@@ -348,7 +355,19 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
         if (!result) {
             return Result.fail("操作失败，请稍后重试");
         }
+        // 冗余列接活:仅 1→2 完成时回填该服务已完成订单数(下单/取消不计;已完成不可回退,单调递增无需回减)
+        if (status == 2) {
+            refreshItemSales(order.getItemId());
+        }
         return Result.ok(status == 1 ? "已接单" : "服务已完成");
+    }
+
+    /** 将 item 的已完成(2)订单数回填 service_item.sales 冗余列(与订单状态更新同事务) */
+    private void refreshItemSales(Long itemId) {
+        Long done = count(new QueryWrapper<ServiceOrder>().eq("item_id", itemId).eq("order_status", 2));
+        serviceItemMapper.update(null, new LambdaUpdateWrapper<ServiceItem>()
+                .eq(ServiceItem::getItemId, itemId)
+                .set(ServiceItem::getSales, done.intValue()));
     }
 
     @Override
@@ -412,5 +431,51 @@ public class ServiceOrderServiceImpl extends ServiceImpl<ServiceOrderMapper, Ser
             result.add(vo);
         }
         return Result.ok(result, (long) result.size());
+    }
+
+    @Override
+    public Result listOrderTrend(int rangeDays) {
+        // 仅管理员可达已由 RoleInterceptor 统一拦截(@RequireRole(ADMIN));区间 1~365(前端 7/30)
+        if (rangeDays < 1 || rangeDays > 365) {
+            return Result.fail("区间参数不正确");
+        }
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(zone);
+        LocalDate startDate = today.minusDays(rangeDays - 1L);
+
+        // 区间内订单一次查出(看板量级小,内存聚合;避开 SQL 按日/时分组的数据库时区歧义)
+        List<ServiceOrder> orders = list(new QueryWrapper<ServiceOrder>()
+                .ge("create_time", Date.from(startDate.atStartOfDay(zone).toInstant())));
+
+        // 按天计数:下标 0 = 区间首日,末位 = 今天;按小时只统计今天(前端「按小时」Tab 语义 = 今日各时段走势)
+        int[] dayCounts = new int[rangeDays];
+        int[] hourCounts = new int[24];
+        for (ServiceOrder o : orders) {
+            if (o.getCreateTime() == null) continue;
+            LocalDateTime t = o.getCreateTime().toInstant().atZone(zone).toLocalDateTime();
+            int idx = (int) ChronoUnit.DAYS.between(startDate, t.toLocalDate());
+            if (idx >= 0 && idx < rangeDays) dayCounts[idx]++;
+            if (t.toLocalDate().equals(today)) hourCounts[t.getHour()]++;
+        }
+
+        // 逐日序列(含零日)与今日 24 小时序列(含零时),有序返回前端直接绘图
+        List<Map<String, Object>> days = new ArrayList<>(rangeDays);
+        for (int i = 0; i < rangeDays; i++) {
+            Map<String, Object> m = new LinkedHashMap<>(2);
+            m.put("date", startDate.plusDays(i).toString());
+            m.put("count", dayCounts[i]);
+            days.add(m);
+        }
+        List<Map<String, Object>> hours = new ArrayList<>(24);
+        for (int h = 0; h < 24; h++) {
+            Map<String, Object> m = new LinkedHashMap<>(2);
+            m.put("hour", h);
+            m.put("count", hourCounts[h]);
+            hours.add(m);
+        }
+        Map<String, Object> data = new LinkedHashMap<>(2);
+        data.put("days", days);
+        data.put("hours", hours);
+        return Result.ok(data);
     }
 }

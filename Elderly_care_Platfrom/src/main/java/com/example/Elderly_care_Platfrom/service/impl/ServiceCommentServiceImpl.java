@@ -2,21 +2,26 @@ package com.example.Elderly_care_Platfrom.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.Elderly_care_Platfrom.dao.MyCommentVO;
+import com.example.Elderly_care_Platfrom.dao.ProviderCommentVO;
 import com.example.Elderly_care_Platfrom.dao.Result;
 import com.example.Elderly_care_Platfrom.entity.ServiceComment;
 import com.example.Elderly_care_Platfrom.entity.ServiceItem;
 import com.example.Elderly_care_Platfrom.entity.ServiceOrder;
 import com.example.Elderly_care_Platfrom.entity.ServiceProvider;
+import com.example.Elderly_care_Platfrom.entity.SysUser;
 import com.example.Elderly_care_Platfrom.mapper.ServiceCommentMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceItemMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceOrderMapper;
 import com.example.Elderly_care_Platfrom.mapper.ServiceProviderMapper;
+import com.example.Elderly_care_Platfrom.mapper.SysUserMapper;
 import com.example.Elderly_care_Platfrom.service.IServiceCommentService;
 import com.example.Elderly_care_Platfrom.utils.UserContext;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -47,7 +52,10 @@ public class ServiceCommentServiceImpl extends ServiceImpl<ServiceCommentMapper,
     private ServiceProviderMapper serviceProviderMapper;
     @Resource
     private ServiceItemMapper serviceItemMapper;
+    @Resource
+    private SysUserMapper sysUserMapper;
 
+    @Transactional
     @Override
     public Result createComment(ServiceComment comment) {
         Long userId = Long.valueOf(UserContext.get().userId());
@@ -100,7 +108,23 @@ public class ServiceCommentServiceImpl extends ServiceImpl<ServiceCommentMapper,
         if (!save(comment)) {
             return Result.fail("评价提交失败，请稍后重试");
         }
+        // 冗余列接活:该服务(按 item_id)评价均值回填 service_item.score,与评价写同事务;删评功能落地时同法重算
+        refreshItemScore(order.getItemId());
         return Result.ok(getById(comment.getCommentId()));
+    }
+
+    /** 将 item 全部评价均值回填 service_item.score(1 位小数 HALF_UP;无评价显式置 NULL——updateById 跳 null 无法置空,故用 LambdaUpdateWrapper) */
+    private void refreshItemScore(Long itemId) {
+        List<ServiceComment> comments = list(new QueryWrapper<ServiceComment>().eq("item_id", itemId));
+        if (comments.isEmpty()) {
+            serviceItemMapper.update(null, new LambdaUpdateWrapper<ServiceItem>()
+                    .eq(ServiceItem::getItemId, itemId).set(ServiceItem::getScore, null));
+            return;
+        }
+        double avg = comments.stream().mapToInt(ServiceComment::getScore).average().orElse(0);
+        serviceItemMapper.update(null, new LambdaUpdateWrapper<ServiceItem>()
+                .eq(ServiceItem::getItemId, itemId)
+                .set(ServiceItem::getScore, BigDecimal.valueOf(avg).setScale(1, RoundingMode.HALF_UP)));
     }
 
     @Override
@@ -169,6 +193,55 @@ public class ServiceCommentServiceImpl extends ServiceImpl<ServiceCommentMapper,
             data.put("reviewCount", comments.size());
         }
         return Result.ok(data);
+    }
+
+    @Override
+    public Result listMyProviderComments() {
+        // 商家身份:token userId 即 provider_id(同 getProviderScore 口径)
+        Long providerId = Long.valueOf(UserContext.get().userId());
+        List<ServiceComment> comments = list(new QueryWrapper<ServiceComment>()
+                .eq("provider_id", providerId)
+                .orderByDesc("create_time"));
+        List<ProviderCommentVO> result = new ArrayList<>(comments.size());
+        if (comments.isEmpty()) {
+            return Result.ok(result, 0L);
+        }
+
+        // 关联订单号/家属昵称/服务名一次批量查出(防 N+1)
+        Set<Long> orderIds = new HashSet<>();
+        Set<Long> userIds = new HashSet<>();
+        Set<Long> itemIds = new HashSet<>();
+        for (ServiceComment c : comments) {
+            if (c.getOrderId() != null) orderIds.add(c.getOrderId());
+            if (c.getUserId() != null) userIds.add(c.getUserId());
+            if (c.getItemId() != null) itemIds.add(c.getItemId());
+        }
+        Map<Long, ServiceOrder> orderMap = orderIds.isEmpty() ? Collections.emptyMap()
+                : toMap(serviceOrderMapper.selectBatchIds(orderIds), ServiceOrder::getOrderId);
+        Map<Long, SysUser> userMap = userIds.isEmpty() ? Collections.emptyMap()
+                : toMap(sysUserMapper.selectBatchIds(userIds), SysUser::getId);
+        Map<Long, ServiceItem> itemMap = itemIds.isEmpty() ? Collections.emptyMap()
+                : toMap(serviceItemMapper.selectBatchIds(itemIds), ServiceItem::getItemId);
+
+        for (ServiceComment c : comments) {
+            ServiceOrder order = c.getOrderId() == null ? null : orderMap.get(c.getOrderId());
+            SysUser user = c.getUserId() == null ? null : userMap.get(c.getUserId());
+            ServiceItem item = c.getItemId() == null ? null : itemMap.get(c.getItemId());
+
+            ProviderCommentVO vo = new ProviderCommentVO();
+            vo.setCommentId(c.getCommentId());
+            vo.setOrderId(c.getOrderId());
+            vo.setOrderNo(order == null ? null : order.getOrderNo());
+            vo.setUserId(c.getUserId());
+            vo.setUserName(user == null ? "匿名用户" : user.getUserName());
+            vo.setItemId(c.getItemId());
+            vo.setItemName(item == null ? null : item.getItemName());
+            vo.setScore(c.getScore());
+            vo.setContent(c.getContent());
+            vo.setCreateTime(c.getCreateTime());
+            result.add(vo);
+        }
+        return Result.ok(result, (long) result.size());
     }
 
     /** 批量查出实体列表转 id -> 实体 map */

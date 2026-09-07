@@ -58,4 +58,18 @@ public class ServiceItemController {
     public Result toggleStatus(@PathVariable Long id, @RequestParam Integer status) {
         return serviceItemService.toggleItemStatus(id, status);
     }
+
+    /** 管理员端：全平台服务项目列表（status 可选 0下架/1上架；含商家名/分类名，方法级 ADMIN 覆盖类级 PROVIDER） */
+    @RequireRole(RoleType.ADMIN)
+    @GetMapping("/admin/list")
+    public Result adminList(@RequestParam(required = false) Integer status) {
+        return serviceItemService.listAdminItems(status);
+    }
+
+    /** 管理员端：任意服务上下架监督（status=0 或 1，无归属校验；方法级 ADMIN 覆盖类级 PROVIDER） */
+    @RequireRole(RoleType.ADMIN)
+    @PutMapping("/admin/status/{itemId}")
+    public Result adminToggleStatus(@PathVariable Long itemId, @RequestParam Integer status) {
+        return serviceItemService.toggleItemStatusByAdmin(itemId, status);
+    }
 }
