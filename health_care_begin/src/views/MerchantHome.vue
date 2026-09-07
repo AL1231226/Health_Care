@@ -1,6 +1,6 @@
 <script setup>
-// ============ 商家工作台首页（服务项目已接后端 /service-item/*） ============
-// 仍为本地态：店铺资料卡（user_info 兜底，待接 /service-provider 资料接口）
+// ============ 商家工作台首页（服务项目已接 /service-item/*；店铺资料编辑接 /service-provider/self） ============
+// 店铺信息卡：初始取登录 user_info 兜底展示（可失真），点「编辑资料」时拉 /service-provider/self 最新行并保存
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -8,6 +8,7 @@ import { ArrowDown, Shop, Phone, Calendar, Location, Star, WarningFilled } from 
 import { listItems, addItem, updateItem, deleteItem, toggleItemStatus } from '@/api/item.js'
 import { listCategory } from '@/api/category.js'
 import { listMerchantOrders, updateOrderStatus } from '@/api/order.js'
+import { getSelfProvider, updateSelfProvider } from '@/api/provider.js'
 
 const router = useRouter()
 
@@ -197,6 +198,73 @@ const toggleStatus = async (row) => {
   }
 }
 
+/* ---------- 店铺资料编辑（商家自助查改 GET/PUT /service-provider/self） ---------- */
+const profileDialogVisible = ref(false)
+const profileSaving = ref(false)
+const profileFormRef = ref()
+const profileForm = reactive({
+  providerId: null,
+  providerName: '',
+  categoryId: null,
+  legalPerson: '',
+  intro: '',
+  phone: '', // 登录账号，仅只读展示不可改
+  address: '',
+})
+const profileRules = {
+  providerName: [{ required: true, message: '请输入商家名称', trigger: 'blur' }],
+  categoryId: [{ required: true, message: '请选择主营分类', trigger: 'change' }],
+}
+const openProfileEdit = async () => {
+  // 弹窗前拉最新店铺资料填表单（不依赖登录时的本地快照，失败提示后不打开）
+  try {
+    const res = await getSelfProvider()
+    if (res.success) {
+      Object.assign(profileForm, {
+        providerId: res.data?.providerId ?? null,
+        providerName: res.data?.providerName ?? '',
+        categoryId: res.data?.categoryId ?? null,
+        legalPerson: res.data?.legalPerson ?? '',
+        intro: res.data?.intro ?? '',
+        phone: res.data?.phone ?? '',
+        address: res.data?.address ?? '',
+      })
+      profileDialogVisible.value = true
+    } else {
+      ElMessage.error(res.errorMsg || '加载店铺资料失败')
+    }
+  } catch (err) { /* 拦截器已统一提示 */ }
+}
+const saveProfile = async () => {
+  const valid = await profileFormRef.value.validate().catch(() => false)
+  if (!valid) return
+  profileSaving.value = true
+  try {
+    // 只提交可编辑字段（后端另有白名单兜底，phone/status 等改了也无效）
+    const res = await updateSelfProvider({
+      providerName: profileForm.providerName,
+      categoryId: profileForm.categoryId,
+      legalPerson: profileForm.legalPerson,
+      intro: profileForm.intro,
+      address: profileForm.address,
+    })
+    if (res.success) {
+      ElMessage.success('店铺资料已保存')
+      // 响应为最新商家行（密码已剔除），整对象同步店铺卡/顶栏与 localStorage（与登录存储形状一致），无需重登
+      const updated = res.data
+      if (updated) {
+        Object.assign(provider, updated)
+        localStorage.setItem('user_info', JSON.stringify(updated))
+      }
+      profileDialogVisible.value = false
+    } else {
+      ElMessage.error(res.errorMsg || '保存失败')
+    }
+  } finally {
+    profileSaving.value = false
+  }
+}
+
 /* ---------- 订单管理（GET /service-order/merchant/list 真实数据，接单/完成走状态流转） ---------- */
 const activeTab = ref('items') // items 服务项目 / orders 订单管理
 const orderLoading = ref(false)
@@ -368,7 +436,7 @@ onMounted(() => {
             <span class="tag"><el-icon><Location /></el-icon>{{ provider.address || '地址待完善' }}</span>
           </div>
         </div>
-        <el-button class="edit-btn" plain disabled title="店铺资料编辑功能建设中">编辑资料</el-button>
+        <el-button class="edit-btn" plain @click="openProfileEdit">编辑资料</el-button>
       </section>
 
       <!-- ======== 服务项目 / 订单管理 Tab ======== -->
@@ -542,6 +610,44 @@ onMounted(() => {
       <template #footer>
         <el-button @click="dialogVisible = false">取 消</el-button>
         <el-button class="primary-btn" type="primary" :loading="saving" @click="saveItem">保 存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ======== 编辑店铺资料弹窗（白名单字段；联系电话为登录账号只读不可改） ======== -->
+    <el-dialog v-model="profileDialogVisible" title="编辑店铺资料" width="520px" :close-on-click-modal="false">
+      <el-form ref="profileFormRef" :model="profileForm" :rules="profileRules" label-width="90px">
+        <el-form-item label="商家名称" prop="providerName">
+          <el-input v-model="profileForm.providerName" placeholder="如：城志社区食堂" maxlength="30" />
+        </el-form-item>
+        <el-form-item label="主营分类" prop="categoryId">
+          <el-select v-model="profileForm.categoryId" placeholder="请选择主营分类" style="width: 100%">
+            <el-option v-for="c in categories" :key="c.categoryId" :label="c.categoryName" :value="c.categoryId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="负责人" prop="legalPerson">
+          <el-input v-model="profileForm.legalPerson" placeholder="负责人姓名（选填）" maxlength="30" />
+        </el-form-item>
+        <el-form-item label="简介" prop="intro">
+          <el-input
+            v-model="profileForm.intro"
+            type="textarea"
+            :rows="3"
+            placeholder="一句话介绍店铺服务，便于家属了解"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="联系电话" prop="phone">
+          <el-input v-model="profileForm.phone" disabled />
+          <span class="muted-text" style="margin-left: 8px; font-size: 12px">登录手机号，暂不可修改</span>
+        </el-form-item>
+        <el-form-item label="详细地址" prop="address">
+          <el-input v-model="profileForm.address" placeholder="详细经营地址（选填）" maxlength="100" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="profileDialogVisible = false">取 消</el-button>
+        <el-button class="primary-btn" type="primary" :loading="profileSaving" @click="saveProfile">保 存</el-button>
       </template>
     </el-dialog>
 

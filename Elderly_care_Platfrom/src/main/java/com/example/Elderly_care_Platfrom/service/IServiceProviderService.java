@@ -22,4 +22,10 @@ public interface IServiceProviderService extends IService<ServiceProvider> {
 
     /** 商家启用/停用（管理员）：仅 1 与 2 之间切换，待审核的必须走审核 */
     Result toggleProviderStatus(Long providerId, Integer status);
+
+    /** 商家端：查询本人店铺资料（token userId 即 provider_id；密码不返回） */
+    Result getSelfProfile();
+
+    /** 商家端：修改本人店铺资料（白名单：名称/主营分类/负责人/简介/详细地址；phone/status/role 等一律忽略） */
+    Result updateSelfProfile(ServiceProvider request);
 }

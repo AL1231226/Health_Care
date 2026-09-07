@@ -30,3 +30,13 @@ export const getProviderDetail = (providerId) => {
 export const getProviderComments = (providerId) => {
   return request.get('/service-category/provider-comments', { params: { providerId } })
 }
+
+// 商家本人店铺资料（商家端）：GET /service-provider/self，返回最新行（密码剔除）
+export const getSelfProvider = () => {
+  return request.get('/service-provider/self')
+}
+
+// 修改本人店铺资料（商家端）：PUT /service-provider/self，白名单字段（名称/分类/负责人/简介/地址），phone/status 不可改
+export const updateSelfProvider = (data) => {
+  return request.put('/service-provider/self', data)
+}

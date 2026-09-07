@@ -2,12 +2,14 @@ package com.example.Elderly_care_Platfrom.controller;
 
 import com.example.Elderly_care_Platfrom.annotation.RequireRole;
 import com.example.Elderly_care_Platfrom.dao.Result;
+import com.example.Elderly_care_Platfrom.entity.ServiceProvider;
 import com.example.Elderly_care_Platfrom.service.IServiceProviderService;
 import com.example.Elderly_care_Platfrom.utils.RoleType;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,5 +46,19 @@ public class ServiceProviderController {
     @PutMapping("/status/{providerId}")
     public Result toggleProviderStatus(@PathVariable Long providerId, @RequestParam Integer status) {
         return serviceProviderService.toggleProviderStatus(providerId, status);
+    }
+
+    /** 商家端：查询本人店铺资料（登录后自用；方法级 PROVIDER 覆盖类级 ADMIN，管理员/家属不可调） */
+    @RequireRole(RoleType.PROVIDER)
+    @GetMapping("/self")
+    public Result self() {
+        return serviceProviderService.getSelfProfile();
+    }
+
+    /** 商家端：修改本人店铺资料（白名单字段；phone/status/role/password 等一律忽略，不改登录账号） */
+    @RequireRole(RoleType.PROVIDER)
+    @PutMapping("/self")
+    public Result updateSelf(@RequestBody ServiceProvider serviceProvider) {
+        return serviceProviderService.updateSelfProfile(serviceProvider);
     }
 }
