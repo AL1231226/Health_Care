@@ -18,8 +18,11 @@ import com.example.Elderly_care_Platfrom.utils.UserContext;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +150,25 @@ public class ServiceCommentServiceImpl extends ServiceImpl<ServiceCommentMapper,
             result.add(vo);
         }
         return Result.ok(result, (long) result.size());
+    }
+
+    @Override
+    public Result getProviderScore() {
+        //商家身份:token userId 即 provider_id(登录后状态必为 1,同商家自助查资料口径)
+        Long providerId = Long.valueOf(UserContext.get().userId());
+        //评分口径与家属端同源:service_comment 实时平均;不读 service_item.score 冗余列(死列,从未聚合写入)
+        List<ServiceComment> comments = list(new QueryWrapper<ServiceComment>()
+                .eq("provider_id", providerId));
+        Map<String, Object> data = new HashMap<>(4);
+        if (comments.isEmpty()) {
+            data.put("score", null);
+            data.put("reviewCount", 0);
+        } else {
+            double avg = comments.stream().mapToInt(ServiceComment::getScore).average().orElse(0);
+            data.put("score", BigDecimal.valueOf(avg).setScale(1, RoundingMode.HALF_UP));
+            data.put("reviewCount", comments.size());
+        }
+        return Result.ok(data);
     }
 
     /** 批量查出实体列表转 id -> 实体 map */

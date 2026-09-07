@@ -39,4 +39,11 @@ public class ServiceCommentController {
     public Result my() {
         return serviceCommentService.listMyComments();
     }
+
+    /** 商家端:本人店铺评分聚合(service_comment 实时平均;方法级 PROVIDER 覆盖类级 USER,家属/管理员打此端点拒「无权限」) */
+    @RequireRole(RoleType.PROVIDER)
+    @GetMapping("/provider/score")
+    public Result providerScore() {
+        return serviceCommentService.getProviderScore();
+    }
 }

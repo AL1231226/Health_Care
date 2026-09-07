@@ -9,6 +9,7 @@ import { listItems, addItem, updateItem, deleteItem, toggleItemStatus } from '@/
 import { listCategory } from '@/api/category.js'
 import { listMerchantOrders, updateOrderStatus } from '@/api/order.js'
 import { getSelfProvider, updateSelfProvider } from '@/api/provider.js'
+import { getProviderScore } from '@/api/comment.js'
 
 const router = useRouter()
 
@@ -80,14 +81,25 @@ const loadItems = async () => {
   }
 }
 
-// 统计卡片（由真实列表实时计算）
+// 统计卡片（前 3 张由真实服务列表实时计算；平均评分单独走评价聚合接口）
 const stats = computed(() => {
   const total = items.value.length
   const onSale = items.value.filter((i) => i.status === 1).length
-  const scored = items.value.filter((i) => i.score != null)
-  const avg = scored.length ? (scored.reduce((s, i) => s + i.score, 0) / scored.length).toFixed(1) : '0.0'
-  return { total, onSale, offSale: total - onSale, avg }
+  return { total, onSale, offSale: total - onSale }
 })
+
+/* ---------- 店铺评分（GET /service-comment/provider/score，service_comment 实时平均，不读 service_item.score 死列） ---------- */
+const providerAvg = ref(null) // 无评价为 null，卡片显示「—」
+const providerReviewCount = ref(0)
+const loadProviderScore = async () => {
+  try {
+    const res = await getProviderScore()
+    if (res.success) {
+      providerAvg.value = res.data?.score ?? null
+      providerReviewCount.value = res.data?.reviewCount ?? 0
+    }
+  } catch (err) { /* 拉取失败保持「—」，不阻塞整页 */ }
+}
 
 /* ---------- 服务项目：新增 / 编辑弹窗 ---------- */
 const dialogVisible = ref(false)
@@ -378,6 +390,7 @@ onMounted(() => {
   loadCategories()
   loadItems()
   loadOrders()
+  loadProviderScore()
 })
 </script>
 
@@ -456,8 +469,9 @@ onMounted(() => {
               <p class="stat-label">已下架</p>
             </div>
             <div class="card stat-card">
-              <p class="stat-num star">{{ stats.avg }}</p>
+              <p class="stat-num star">{{ providerAvg ?? '—' }}</p>
               <p class="stat-label">平均评分</p>
+              <p v-if="providerReviewCount" class="stat-sub muted-text">{{ providerReviewCount }} 条评价</p>
             </div>
           </section>
 
@@ -1001,6 +1015,11 @@ onMounted(() => {
 .stat-num.on { color: #34a853; }
 .stat-num.off { color: #c0b9ae; }
 .stat-num.star { color: #ff7a45; }
+.stat-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .stat-label {
   margin-top: 6px;
   font-size: 13px;
